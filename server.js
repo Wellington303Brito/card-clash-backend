@@ -1,9 +1,9 @@
 const express = require("express");
-const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
 const CARD_DB = require("./cards-db");
+const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
@@ -109,84 +109,64 @@ app.get("/", (req, res) => {
 
 // cadastro
 app.post("/register", async (req, res) => {
-  let { username, email, password } = req.body;
+  try {
+    console.log("Entrou em /register");
+    console.log("Body recebido:", req.body);
 
-  username = normalizeUsername(username);
-  email = normalizeEmail(email);
-  password = String(password || "").trim();
+    const { username, email, password } = req.body;
 
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: "Preencha todos os campos." });
-  }
-
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: "Email inválido." });
-  }
-
-  if (username.length < 3) {
-    return res.status(400).json({ error: "O usuário deve ter pelo menos 3 caracteres." });
-  }
-
-  if (username.length > 20) {
-    return res.status(400).json({ error: "O usuário pode ter no máximo 20 caracteres." });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ error: "A senha deve ter pelo menos 6 caracteres." });
-  }
-
-  const checkSql = "SELECT id, username, email FROM players WHERE email = ? OR username = ?";
-
-  db.query(checkSql, [email, username], async (checkErr, checkResults) => {
-    if (checkErr) {
-      console.error(checkErr);
-      return res.status(500).json({ error: "Erro ao verificar usuário." });
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: "Preencha todos os campos." });
     }
 
-    if (checkResults.length > 0) {
-      const existing = checkResults[0];
+    console.log("Verificando usuário existente...");
 
-      if (existing.email === email) {
-        return res.status(400).json({ error: "Esse email já está em uso." });
+    const [existingUsers] = await db.query(
+      "SELECT * FROM players WHERE email = ? OR username = ?",
+      [email, username]
+    );
+
+    console.log("Resultado verificação:", existingUsers);
+
+    if (existingUsers.length > 0) {
+      return res.status(400).json({ error: "Usuário ou email já existe." });
+    }
+
+    console.log("Criptografando senha...");
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    console.log("Inserindo no banco...");
+    const [result] = await db.query(
+      "INSERT INTO players (username, email, password, coins, rolls) VALUES (?, ?, ?, ?, ?)",
+      [username, email, hashedPassword, 0, 40]
+    );
+
+    console.log("Usuário criado com sucesso:", result);
+
+    const token = jwt.sign(
+      { id: result.insertId, email },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json({
+      message: "Usuário cadastrado com sucesso",
+      token,
+      player: {
+        id: result.insertId,
+        username,
+        email,
+        coins: 0,
+        rolls: 40
       }
-
-      if (existing.username === username) {
-        return res.status(400).json({ error: "Esse nome de usuário já está em uso." });
-      }
-    }
-
-    try {
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const insertSql = "INSERT INTO players (username, email, password) VALUES (?, ?, ?)";
-
-      db.query(insertSql, [username, email, hashedPassword], (insertErr, result) => {
-        if (insertErr) {
-          console.error(insertErr);
-          return res.status(500).json({ error: "Erro ao cadastrar." });
-        }
-
-        const newPlayer = {
-          id: result.insertId,
-          username,
-          email,
-          coins: 0,
-          rolls: 40
-        };
-
-        const token = generateToken(newPlayer);
-
-        res.json({
-          message: "Cadastro feito com sucesso!",
-          player: newPlayer,
-          token
-        });
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Erro interno." });
-    }
-  });
+    });
+  } catch (error) {
+    console.error("Erro real no /register:", error);
+    res.status(500).json({
+      error: "Erro ao cadastrar usuário.",
+      details: error.message
+    });
+  }
 });
 
 // login
