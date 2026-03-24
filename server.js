@@ -104,7 +104,7 @@ function authenticateToken(req, res, next) {
 
 
 app.get("/", (req, res) => {
-  res.send("Servidor funcionando!");
+  res.send("VERSAO NOVA");
 });
 
 // cadastro
