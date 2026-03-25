@@ -169,72 +169,63 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// login
-app.post("/login", (req, res) => {
-  let { email, password } = req.body;
+app.post("/login", async (req, res) => {
+  try {
+    let { email, password } = req.body;
 
-  email = normalizeEmail(email);
-  password = String(password || "").trim();
+    email = normalizeEmail(email);
+    password = String(password || "").trim();
 
-  if (!email || !password) {
-    return res.status(400).json({ error: "Preencha email e senha." });
-  }
-
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: "Email inválido." });
-  }
-
-  const sql = "SELECT * FROM players WHERE email = ?";
-
-  db.query(sql, [email], async (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro no servidor." });
+    if (!email || !password) {
+      return res.status(400).json({ error: "Preencha email e senha." });
     }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "Email inválido." });
+    }
+
+    const sql = "SELECT * FROM players WHERE email = ?";
+    const [results] = await db.query(sql, [email]);
 
     if (results.length === 0) {
       return res.status(404).json({ error: "Usuário não encontrado." });
     }
 
     const player = results[0];
+    const senhaCorreta = await bcrypt.compare(password, player.password);
 
-    try {
-      const senhaCorreta = await bcrypt.compare(password, player.password);
-
-      if (!senhaCorreta) {
-        return res.status(401).json({ error: "Senha incorreta." });
-      }
-
-      const playerData = {
-        id: player.id,
-        username: player.username,
-        email: player.email,
-        coins: player.coins,
-        rolls: player.rolls
-      };
-
-      const token = generateToken(playerData);
-
-      res.json({
-        message: "Login realizado com sucesso!",
-        player: playerData,
-        token
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Erro interno." });
+    if (!senhaCorreta) {
+      return res.status(401).json({ error: "Senha incorreta." });
     }
-  });
+
+    const playerData = {
+      id: player.id,
+      username: player.username,
+      email: player.email,
+      coins: player.coins,
+      rolls: player.rolls
+    };
+
+    const token = generateToken(playerData);
+
+    res.json({
+      message: "Login realizado com sucesso!",
+      player: playerData,
+      token
+    });
+  } catch (error) {
+    console.error("Erro no /login:", error);
+    res.status(500).json({
+      error: "Erro no login.",
+      details: error.message
+    });
+  }
 });
 
-app.get("/me", authenticateToken, (req, res) => {
-  const sql = "SELECT id, username, email, coins, rolls FROM players WHERE id = ?";
-
-  db.query(sql, [req.player.id], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao buscar jogador." });
-    }
+app.get("/me", authenticateToken, async (req, res) => {
+  try {
+    const sql = "SELECT id, username, email, coins, rolls FROM players WHERE id = ?";
+    const [results] = await db.query(sql, [req.player.id]);
 
     if (results.length === 0) {
       return res.status(404).json({ error: "Jogador não encontrado." });
@@ -244,7 +235,13 @@ app.get("/me", authenticateToken, (req, res) => {
       message: "Usuário autenticado",
       player: results[0]
     });
-  });
+  } catch (error) {
+    console.error("Erro no /me:", error);
+    res.status(500).json({
+      error: "Erro ao buscar jogador.",
+      details: error.message
+    });
+  }
 });
 
 app.get("/collection", authenticateToken, (req, res) => {
