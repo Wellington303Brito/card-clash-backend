@@ -205,6 +205,7 @@ app.post("/login", async (req, res) => {
       coins: player.coins,
       rolls: player.rolls
     };
+    window.location.href = "index.html";
 
     const token = generateToken(playerData);
 
@@ -267,20 +268,17 @@ app.get("/collection", authenticateToken, (req, res) => {
   });
 });
 
-app.get("/collection/full", authenticateToken, (req, res) => {
-  const playerId = req.player.id;
+app.get("/collection/full", authenticateToken, async (req, res) => {
+  try {
+    const playerId = req.player.id;
 
-  const sql = `
-    SELECT card_id, quantity
-    FROM player_cards
-    WHERE player_id = ?
-  `;
+    const sql = `
+      SELECT card_id, quantity
+      FROM player_cards
+      WHERE player_id = ?
+    `;
 
-  db.query(sql, [playerId], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao buscar coleção." });
-    }
+    const [results] = await db.query(sql, [playerId]);
 
     const collection = results
       .map(row => {
@@ -297,55 +295,18 @@ app.get("/collection/full", authenticateToken, (req, res) => {
     res.json({
       cards: collection
     });
-  });
+  } catch (error) {
+    console.error("Erro em /collection/full:", error);
+    res.status(500).json({ error: "Erro ao buscar coleção completa." });
+  }
 });
 
-app.post("/collection/add", authenticateToken, (req, res) => {
-  const playerId = req.player.id;
-  const { card_id, quantity } = req.body;
+app.post("/roll", authenticateToken, async (req, res) => {
+  try {
+    const playerId = req.player.id;
 
-  const qty = Number(quantity) || 1;
-
-  if (!card_id) {
-    return res.status(400).json({ error: "card_id é obrigatório." });
-  }
-
-  if (qty <= 0) {
-    return res.status(400).json({ error: "quantity deve ser maior que 0." });
-  }
-
-  const sql = `
-    INSERT INTO player_cards (player_id, card_id, quantity)
-    VALUES (?, ?, ?)
-    ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
-  `;
-
-  db.query(sql, [playerId, card_id, qty], (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao adicionar carta." });
-    }
-
-    res.json({
-      message: "Carta adicionada com sucesso!",
-      card_id,
-      quantity: qty
-    });
-  });
-});
-
-app.post("/roll", authenticateToken, (req, res) => {
-  const playerId = req.player.id;
-
-  const getPlayerSql = "SELECT rolls FROM players WHERE id = ?";
-
-  db.query(getPlayerSql, [playerId], (playerErr, playerResults) => {
-    if (playerErr) {
-      console.error(playerErr);
-      return res.status(500).json({ error: "Erro ao buscar rolls do jogador." });
-    }
-
-    console.log("RESULTADO PLAYER:", playerResults);
+    const getPlayerSql = "SELECT rolls FROM players WHERE id = ?";
+    const [playerResults] = await db.query(getPlayerSql, [playerId]);
 
     if (playerResults.length === 0) {
       return res.status(404).json({ error: "Jogador não encontrado." });
@@ -370,43 +331,28 @@ app.post("/roll", authenticateToken, (req, res) => {
       ON DUPLICATE KEY UPDATE quantity = quantity + 1
     `;
 
-    db.query(insertCardSql, [playerId, card.id], (cardErr) => {
-      if (cardErr) {
-        console.error(cardErr);
-        return res.status(500).json({ error: "Erro ao salvar carta sorteada." });
-      }
+    await db.query(insertCardSql, [playerId, card.id]);
 
-      const updateRollsSql = "UPDATE players SET rolls = rolls - 1 WHERE id = ?";
+    const updateRollsSql = "UPDATE players SET rolls = rolls - 1 WHERE id = ?";
+    await db.query(updateRollsSql, [playerId]);
 
-      db.query(updateRollsSql, [playerId], (rollErr) => {
-        if (rollErr) {
-          console.error(rollErr);
-          return res.status(500).json({ error: "Erro ao atualizar rolls." });
-        }
-
-        res.json({
-          message: "Roll realizado com sucesso!",
-          card,
-          remainingRolls: currentRolls - 1
-        });
-      });
+    res.json({
+      message: "Roll realizado com sucesso!",
+      card,
+      remainingRolls: currentRolls - 1
     });
-  });
+  } catch (error) {
+    console.error("Erro em /roll:", error);
+    res.status(500).json({ error: "Erro ao realizar roll." });
+  }
 });
 
-app.post("/roll/10", authenticateToken, (req, res) => {
-  console.log("=== ENTROU NA /roll/10 ===");
-  console.log("PLAYER ID:", req.player.id);
-  const playerId = req.player.id;
+app.post("/roll/10", authenticateToken, async (req, res) => {
+  try {
+    const playerId = req.player.id;
 
-
-  const getPlayerSql = "SELECT rolls FROM players WHERE id = ?";
-
-  db.query(getPlayerSql, [playerId], (playerErr, playerResults) => {
-    if (playerErr) {
-      console.error(playerErr);
-      return res.status(500).json({ error: "Erro ao buscar rolls do jogador." });
-    }
+    const getPlayerSql = "SELECT rolls FROM players WHERE id = ?";
+    const [playerResults] = await db.query(getPlayerSql, [playerId]);
 
     if (playerResults.length === 0) {
       return res.status(404).json({ error: "Jogador não encontrado." });
@@ -441,44 +387,28 @@ app.post("/roll/10", authenticateToken, (req, res) => {
       groupedCards[card.id] += 1;
     });
 
-    const values = Object.entries(groupedCards).map(([cardId, quantity]) => [
-      playerId,
-      cardId,
-      quantity
-    ]);
+    for (const [cardId, quantity] of Object.entries(groupedCards)) {
+      const insertSql = `
+        INSERT INTO player_cards (player_id, card_id, quantity)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+      `;
+      await db.query(insertSql, [playerId, cardId, quantity]);
+    }
 
-    const insertSql = `
-      INSERT INTO player_cards (player_id, card_id, quantity)
-      VALUES ?
-      ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
-    `;
+    const updateRollsSql = "UPDATE players SET rolls = rolls - ? WHERE id = ?";
+    await db.query(updateRollsSql, [amountToRoll, playerId]);
 
-    console.log("ROLLED CARDS:", rolledCards);
-    console.log("GROUPED VALUES:", values);
-
-    db.query(insertSql, [values], (insertErr) => {
-      if (insertErr) {
-        console.error(insertErr);
-        return res.status(500).json({ error: "Erro ao salvar cartas sorteadas." });
-      }
-
-      const updateRollsSql = "UPDATE players SET rolls = rolls - ? WHERE id = ?";
-
-      db.query(updateRollsSql, [amountToRoll, playerId], (rollErr) => {
-        if (rollErr) {
-          console.error(rollErr);
-          return res.status(500).json({ error: "Erro ao atualizar rolls." });
-        }
-
-        res.json({
-          message: `${amountToRoll} rolls realizados com sucesso!`,
-          cards: rolledCards,
-          usedRolls: amountToRoll,
-          remainingRolls: currentRolls - amountToRoll
-        });
-      });
+    res.json({
+      message: `${amountToRoll} rolls realizados com sucesso!`,
+      cards: rolledCards,
+      usedRolls: amountToRoll,
+      remainingRolls: currentRolls - amountToRoll
     });
-  });
+  } catch (error) {
+    console.error("Erro em /roll/10:", error);
+    res.status(500).json({ error: "Erro ao realizar 10 rolls." });
+  }
 });
 
 app.get("/cards", (req, res) => {
