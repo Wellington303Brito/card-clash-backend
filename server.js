@@ -245,27 +245,38 @@ app.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/collection", authenticateToken, (req, res) => {
-  const playerId = req.player.id;
+app.post("/collection/add", authenticateToken, async (req, res) => {
+  try {
+    const playerId = req.player.id;
+    const { card_id, quantity } = req.body;
 
-  const sql = `
-    SELECT card_id, quantity
-    FROM player_cards
-    WHERE player_id = ?
-    ORDER BY card_id ASC
-  `;
+    const qty = Number(quantity) || 1;
 
-  db.query(sql, [playerId], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao buscar coleção." });
+    if (!card_id) {
+      return res.status(400).json({ error: "card_id é obrigatório." });
     }
 
+    if (qty <= 0) {
+      return res.status(400).json({ error: "quantity deve ser maior que 0." });
+    }
+
+    const sql = `
+      INSERT INTO player_cards (player_id, card_id, quantity)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+    `;
+
+    await db.query(sql, [playerId, card_id, qty]);
+
     res.json({
-      playerId,
-      cards: results
+      message: "Carta adicionada com sucesso!",
+      card_id,
+      quantity: qty
     });
-  });
+  } catch (error) {
+    console.error("Erro em /collection/add:", error);
+    res.status(500).json({ error: "Erro ao adicionar carta." });
+  }
 });
 
 app.get("/collection/full", authenticateToken, async (req, res) => {
@@ -417,20 +428,17 @@ app.get("/cards", (req, res) => {
   });
 });
 
-app.post("/decks", (req, res) => {
-  const { player_id, name, cards } = req.body;
+app.post("/decks", authenticateToken, async (req, res) => {
+  try {
+    const player_id = req.player.id;
+    const { name, cards } = req.body;
 
-  if (!player_id || !name || !Array.isArray(cards)) {
-    return res.status(400).json({ error: "Dados inválidos." });
-  }
-
-  const sqlDeck = "INSERT INTO decks (player_id, name) VALUES (?, ?)";
-
-  db.query(sqlDeck, [player_id, name], (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao criar deck." });
+    if (!player_id || !name || !Array.isArray(cards)) {
+      return res.status(400).json({ error: "Dados inválidos." });
     }
+
+    const sqlDeck = "INSERT INTO decks (player_id, name) VALUES (?, ?)";
+    const [result] = await db.query(sqlDeck, [player_id, name]);
 
     const deckId = result.insertId;
 
@@ -442,34 +450,48 @@ app.post("/decks", (req, res) => {
 
     const sqlCards = "INSERT INTO deck_cards (deck_id, card_name, quantity) VALUES ?";
 
-    db.query(sqlCards, [values], (err2) => {
-      if (err2) {
-        console.error(err2);
-        return res.status(500).json({ error: "Erro ao salvar cartas." });
-      }
+    await db.query(sqlCards, [values]);
 
-      res.json({ message: "Deck salvo com sucesso!", deckId });
-    });
-  });
+    res.json({ message: "Deck salvo com sucesso!", deckId });
+  } catch (error) {
+    console.error("Erro em /decks:", error);
+    res.status(500).json({ error: "Erro ao criar deck." });
+  }
 });
 
-app.delete("/decks/:deckId", (req, res) => {
-  const { deckId } = req.params;
+app.put("/decks/:deckId", authenticateToken, async (req, res) => {
+  try {
+    const { deckId } = req.params;
+    const { name, cards } = req.body;
 
-  const sql = "DELETE FROM decks WHERE id = ?";
-
-  db.query(sql, [deckId], (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao deletar deck." });
+    if (!name || !Array.isArray(cards)) {
+      return res.status(400).json({ error: "Dados inválidos." });
     }
+
+    const updateDeckSql = "UPDATE decks SET name = ? WHERE id = ? AND player_id = ?";
+    const [result] = await db.query(updateDeckSql, [name, deckId, req.player.id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "Deck não encontrado." });
     }
 
-    res.json({ message: "Deck deletado com sucesso!" });
-  });
+    const deleteCardsSql = "DELETE FROM deck_cards WHERE deck_id = ?";
+    await db.query(deleteCardsSql, [deckId]);
+
+    if (cards.length === 0) {
+      return res.json({ message: "Deck atualizado com sucesso!" });
+    }
+
+    const values = cards.map((card) => [deckId, card.card_name, card.quantity]);
+    const insertCardsSql = "INSERT INTO deck_cards (deck_id, card_name, quantity) VALUES ?";
+
+    await db.query(insertCardsSql, [values]);
+
+    res.json({ message: "Deck atualizado com sucesso!" });
+  } catch (error) {
+    console.error("Erro em PUT /decks/:deckId:", error);
+    res.status(500).json({ error: "Erro ao atualizar deck." });
+  }
 });
 
 app.put("/decks/:deckId", (req, res) => {
