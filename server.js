@@ -101,8 +101,6 @@ function authenticateToken(req, res, next) {
   });
 }
 
-
-
 app.get("/", (req, res) => {
   res.send("VERSAO NOVA");
 });
@@ -110,58 +108,51 @@ app.get("/", (req, res) => {
 // cadastro
 app.post("/register", async (req, res) => {
   try {
-    console.log("Entrou em /register");
-    console.log("Body recebido:", req.body);
-
-    const { username, email, password } = req.body;
+    const username = normalizeUsername(req.body.username);
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "").trim();
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: "Preencha todos os campos." });
     }
 
-    console.log("Verificando usuário existente...");
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "Email inválido." });
+    }
 
     const [existingUsers] = await db.query(
       "SELECT * FROM players WHERE email = ? OR username = ?",
       [email, username]
     );
 
-    console.log("Resultado verificação:", existingUsers);
-
     if (existingUsers.length > 0) {
       return res.status(400).json({ error: "Usuário ou email já existe." });
     }
 
-    console.log("Criptografando senha...");
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    console.log("Inserindo no banco...");
     const [result] = await db.query(
       "INSERT INTO players (username, email, password, coins, rolls) VALUES (?, ?, ?, ?, ?)",
       [username, email, hashedPassword, 0, 40]
     );
 
-    console.log("Usuário criado com sucesso:", result);
+    const playerData = {
+      id: result.insertId,
+      username,
+      email,
+      coins: 0,
+      rolls: 40
+    };
 
-    const token = jwt.sign(
-      { id: result.insertId, email },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = generateToken(playerData);
 
     res.status(201).json({
       message: "Usuário cadastrado com sucesso",
       token,
-      player: {
-        id: result.insertId,
-        username,
-        email,
-        coins: 0,
-        rolls: 40
-      }
+      player: playerData
     });
   } catch (error) {
-    console.error("Erro real no /register:", error);
+    console.error("Erro em /register:", error);
     res.status(500).json({
       error: "Erro ao cadastrar usuário.",
       details: error.message
@@ -169,6 +160,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// login
 app.post("/login", async (req, res) => {
   try {
     let { email, password } = req.body;
@@ -205,7 +197,6 @@ app.post("/login", async (req, res) => {
       coins: player.coins,
       rolls: player.rolls
     };
-    window.location.href = "index.html";
 
     const token = generateToken(playerData);
 
@@ -215,11 +206,8 @@ app.post("/login", async (req, res) => {
       token
     });
   } catch (error) {
-    console.error("Erro no /login:", error);
-    res.status(500).json({
-      error: "Erro no login.",
-      details: error.message
-    });
+    console.error("Erro em /login:", error);
+    res.status(500).json({ error: "Erro no login." });
   }
 });
 
@@ -237,11 +225,64 @@ app.get("/me", authenticateToken, async (req, res) => {
       player: results[0]
     });
   } catch (error) {
-    console.error("Erro no /me:", error);
-    res.status(500).json({
-      error: "Erro ao buscar jogador.",
-      details: error.message
+    console.error("Erro em /me:", error);
+    res.status(500).json({ error: "Erro ao buscar jogador." });
+  }
+});
+
+app.get("/collection", authenticateToken, async (req, res) => {
+  try {
+    const playerId = req.player.id;
+
+    const sql = `
+      SELECT card_id, quantity
+      FROM player_cards
+      WHERE player_id = ?
+      ORDER BY card_id ASC
+    `;
+
+    const [results] = await db.query(sql, [playerId]);
+
+    res.json({
+      playerId,
+      cards: results
     });
+  } catch (error) {
+    console.error("Erro em /collection:", error);
+    res.status(500).json({ error: "Erro ao buscar coleção." });
+  }
+});
+
+app.get("/collection/full", authenticateToken, async (req, res) => {
+  try {
+    const playerId = req.player.id;
+
+    const sql = `
+      SELECT card_id, quantity
+      FROM player_cards
+      WHERE player_id = ?
+    `;
+
+    const [results] = await db.query(sql, [playerId]);
+
+    const collection = results
+      .map(row => {
+        const cardData = CARD_DB[row.card_id];
+        if (!cardData) return null;
+
+        return {
+          ...cardData,
+          quantity: row.quantity
+        };
+      })
+      .filter(Boolean);
+
+    res.json({
+      cards: collection
+    });
+  } catch (error) {
+    console.error("Erro em /collection/full:", error);
+    res.status(500).json({ error: "Erro ao buscar coleção completa." });
   }
 });
 
@@ -276,39 +317,6 @@ app.post("/collection/add", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Erro em /collection/add:", error);
     res.status(500).json({ error: "Erro ao adicionar carta." });
-  }
-});
-
-app.get("/collection/full", authenticateToken, async (req, res) => {
-  try {
-    const playerId = req.player.id;
-
-    const sql = `
-      SELECT card_id, quantity
-      FROM player_cards
-      WHERE player_id = ?
-    `;
-
-    const [results] = await db.query(sql, [playerId]);
-
-    const collection = results
-      .map(row => {
-        const cardData = CARD_DB[row.card_id];
-        if (!cardData) return null;
-
-        return {
-          ...cardData,
-          quantity: row.quantity
-        };
-      })
-      .filter(Boolean);
-
-    res.json({
-      cards: collection
-    });
-  } catch (error) {
-    console.error("Erro em /collection/full:", error);
-    res.status(500).json({ error: "Erro ao buscar coleção completa." });
   }
 });
 
@@ -392,9 +400,7 @@ app.post("/roll/10", authenticateToken, async (req, res) => {
     const groupedCards = {};
 
     rolledCards.forEach(card => {
-      if (!groupedCards[card.id]) {
-        groupedCards[card.id] = 0;
-      }
+      if (!groupedCards[card.id]) groupedCards[card.id] = 0;
       groupedCards[card.id] += 1;
     });
 
@@ -433,7 +439,7 @@ app.post("/decks", authenticateToken, async (req, res) => {
     const player_id = req.player.id;
     const { name, cards } = req.body;
 
-    if (!player_id || !name || !Array.isArray(cards)) {
+    if (!name || !Array.isArray(cards)) {
       return res.status(400).json({ error: "Dados inválidos." });
     }
 
@@ -446,8 +452,7 @@ app.post("/decks", authenticateToken, async (req, res) => {
       return res.json({ message: "Deck vazio salvo com sucesso!", deckId });
     }
 
-    const values = cards.map((card) => [deckId, card.card_name, card.quantity]);
-
+    const values = cards.map(card => [deckId, card.card_name, card.quantity]);
     const sqlCards = "INSERT INTO deck_cards (deck_id, card_name, quantity) VALUES ?";
 
     await db.query(sqlCards, [values]);
@@ -456,6 +461,24 @@ app.post("/decks", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Erro em /decks:", error);
     res.status(500).json({ error: "Erro ao criar deck." });
+  }
+});
+
+app.delete("/decks/:deckId", authenticateToken, async (req, res) => {
+  try {
+    const { deckId } = req.params;
+
+    const sql = "DELETE FROM decks WHERE id = ? AND player_id = ?";
+    const [result] = await db.query(sql, [deckId, req.player.id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Deck não encontrado." });
+    }
+
+    res.json({ message: "Deck deletado com sucesso!" });
+  } catch (error) {
+    console.error("Erro em DELETE /decks/:deckId:", error);
+    res.status(500).json({ error: "Erro ao deletar deck." });
   }
 });
 
@@ -482,7 +505,7 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
       return res.json({ message: "Deck atualizado com sucesso!" });
     }
 
-    const values = cards.map((card) => [deckId, card.card_name, card.quantity]);
+    const values = cards.map(card => [deckId, card.card_name, card.quantity]);
     const insertCardsSql = "INSERT INTO deck_cards (deck_id, card_name, quantity) VALUES ?";
 
     await db.query(insertCardsSql, [values]);
@@ -493,56 +516,6 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro ao atualizar deck." });
   }
 });
-
-app.put("/decks/:deckId", (req, res) => {
-  const { deckId } = req.params;
-  const { name, cards } = req.body;
-
-  if (!name || !Array.isArray(cards)) {
-    return res.status(400).json({ error: "Dados inválidos." });
-  }
-
-  const updateDeckSql = "UPDATE decks SET name = ? WHERE id = ?";
-
-  db.query(updateDeckSql, [name, deckId], (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Erro ao atualizar deck." });
-    }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Deck não encontrado." });
-    }
-
-    const deleteCardsSql = "DELETE FROM deck_cards WHERE deck_id = ?";
-
-    db.query(deleteCardsSql, [deckId], (err2) => {
-      if (err2) {
-        console.error(err2);
-        return res.status(500).json({ error: "Erro ao limpar cartas antigas." });
-      }
-
-      if (cards.length === 0) {
-        return res.json({ message: "Deck atualizado com sucesso!" });
-      }
-
-      const values = cards.map((card) => [deckId, card.card_name, card.quantity]);
-
-      const insertCardsSql = "INSERT INTO deck_cards (deck_id, card_name, quantity) VALUES ?";
-
-      db.query(insertCardsSql, [values], (err3) => {
-        if (err3) {
-          console.error(err3);
-          return res.status(500).json({ error: "Erro ao salvar novas cartas." });
-        }
-
-        res.json({ message: "Deck atualizado com sucesso!" });
-      });
-    });
-  });
-});
-
-
 
 const PORT = process.env.PORT || 3000;
 
