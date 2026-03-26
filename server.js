@@ -52,10 +52,14 @@ function getRandomCardByRarity(rarity) {
     return normalizeRarity(card.rarity || card.raridade) === rarity;
   });
 
-  if (cards.length === 0) return null;
+  if (!cards.length) return null;
 
-  const index = Math.floor(Math.random() * cards.length);
-  return cards[index];
+  const picked = cards[Math.floor(Math.random() * cards.length)];
+
+  return {
+    ...picked,
+    id: picked.id || picked.card_id || picked.name
+  };
 }
 
 function isValidEmail(email) {
@@ -324,14 +328,16 @@ app.post("/roll", authenticateToken, async (req, res) => {
   try {
     const playerId = req.player.id;
 
-    const getPlayerSql = "SELECT rolls FROM players WHERE id = ?";
-    const [playerResults] = await db.query(getPlayerSql, [playerId]);
+    const [playerResults] = await db.query(
+      "SELECT rolls FROM players WHERE id = ?",
+      [playerId]
+    );
 
     if (playerResults.length === 0) {
       return res.status(404).json({ error: "Jogador não encontrado." });
     }
 
-    const currentRolls = playerResults[0].rolls;
+    const currentRolls = Number(playerResults[0].rolls || 0);
 
     if (currentRolls <= 0) {
       return res.status(400).json({ error: "Você não tem mais rolls." });
@@ -340,20 +346,23 @@ app.post("/roll", authenticateToken, async (req, res) => {
     const rolledRarity = rollRarity();
     const card = getRandomCardByRarity(rolledRarity);
 
-    if (!card) {
-      return res.status(500).json({ error: "Nenhuma carta encontrada para essa raridade." });
+    if (!card || !card.id) {
+      throw new Error("Carta inválida sorteada no /roll.");
     }
 
-    const insertCardSql = `
+    await db.query(
+      `
       INSERT INTO player_cards (player_id, card_id, quantity)
       VALUES (?, ?, 1)
       ON DUPLICATE KEY UPDATE quantity = quantity + 1
-    `;
+      `,
+      [playerId, card.id]
+    );
 
-    await db.query(insertCardSql, [playerId, card.id]);
-
-    const updateRollsSql = "UPDATE players SET rolls = rolls - 1 WHERE id = ?";
-    await db.query(updateRollsSql, [playerId]);
+    await db.query(
+      "UPDATE players SET rolls = rolls - 1 WHERE id = ?",
+      [playerId]
+    );
 
     res.json({
       message: "Roll realizado com sucesso!",
@@ -361,8 +370,11 @@ app.post("/roll", authenticateToken, async (req, res) => {
       remainingRolls: currentRolls - 1
     });
   } catch (error) {
-    console.error("Erro em /roll:", error);
-    res.status(500).json({ error: "Erro ao realizar roll." });
+    console.error("Erro real em /roll:", error);
+    res.status(500).json({
+      error: "Erro ao realizar roll.",
+      details: error.message
+    });
   }
 });
 
@@ -370,14 +382,16 @@ app.post("/roll/10", authenticateToken, async (req, res) => {
   try {
     const playerId = req.player.id;
 
-    const getPlayerSql = "SELECT rolls FROM players WHERE id = ?";
-    const [playerResults] = await db.query(getPlayerSql, [playerId]);
+    const [playerResults] = await db.query(
+      "SELECT rolls FROM players WHERE id = ?",
+      [playerId]
+    );
 
     if (playerResults.length === 0) {
       return res.status(404).json({ error: "Jogador não encontrado." });
     }
 
-    const currentRolls = playerResults[0].rolls;
+    const currentRolls = Number(playerResults[0].rolls || 0);
 
     if (currentRolls <= 0) {
       return res.status(400).json({ error: "Você não tem mais rolls." });
@@ -390,31 +404,28 @@ app.post("/roll/10", authenticateToken, async (req, res) => {
       const rolledRarity = rollRarity();
       const card = getRandomCardByRarity(rolledRarity);
 
-      if (!card) {
-        return res.status(500).json({ error: "Nenhuma carta encontrada para essa raridade." });
+      if (!card || !card.id) {
+        throw new Error("Carta inválida sorteada no /roll/10.");
       }
 
       rolledCards.push(card);
     }
 
-    const groupedCards = {};
-
-    rolledCards.forEach(card => {
-      if (!groupedCards[card.id]) groupedCards[card.id] = 0;
-      groupedCards[card.id] += 1;
-    });
-
-    for (const [cardId, quantity] of Object.entries(groupedCards)) {
-      const insertSql = `
+    for (const card of rolledCards) {
+      await db.query(
+        `
         INSERT INTO player_cards (player_id, card_id, quantity)
-        VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
-      `;
-      await db.query(insertSql, [playerId, cardId, quantity]);
+        VALUES (?, ?, 1)
+        ON DUPLICATE KEY UPDATE quantity = quantity + 1
+        `,
+        [playerId, card.id]
+      );
     }
 
-    const updateRollsSql = "UPDATE players SET rolls = rolls - ? WHERE id = ?";
-    await db.query(updateRollsSql, [amountToRoll, playerId]);
+    await db.query(
+      "UPDATE players SET rolls = rolls - ? WHERE id = ?",
+      [amountToRoll, playerId]
+    );
 
     res.json({
       message: `${amountToRoll} rolls realizados com sucesso!`,
@@ -423,15 +434,12 @@ app.post("/roll/10", authenticateToken, async (req, res) => {
       remainingRolls: currentRolls - amountToRoll
     });
   } catch (error) {
-    console.error("Erro em /roll/10:", error);
-    res.status(500).json({ error: "Erro ao realizar 10 rolls." });
+    console.error("Erro real em /roll/10:", error);
+    res.status(500).json({
+      error: "Erro ao realizar 10 rolls.",
+      details: error.message
+    });
   }
-});
-
-app.get("/cards", (req, res) => {
-  res.json({
-    cards: Object.values(CARD_DB)
-  });
 });
 
 app.post("/decks", authenticateToken, async (req, res) => {
