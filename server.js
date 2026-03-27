@@ -574,12 +574,16 @@ io.on("connection", (socket) => {
           {
             socketId: p1.socketId,
             player: p1.player,
-            life: 4
+            life: 4,
+            pe: 1,
+            maxPE: 1
           },
           {
             socketId: p2.socketId,
             player: p2.player,
-            life: 4
+            life: 4,
+            pe: 1,
+            maxPE: 1
           }
         ],
         turn: p1.socketId,
@@ -602,28 +606,25 @@ io.on("connection", (socket) => {
 
     const currentTurnSocket = match.turn;
 
-    const playerSocket =
-      p1.player.id === playerId ? p1.socketId :
-      p2.player.id === playerId ? p2.socketId :
-      null;
+    const currentPlayer =
+      p1.player.id === playerId ? p1 : p2.player.id === playerId ? p2 : null;
 
-    if (!playerSocket) return;
+    if (!currentPlayer) return;
+    if (currentPlayer.socketId !== currentTurnSocket) return;
 
-    // só quem está no turno pode passar
-    if (playerSocket !== currentTurnSocket) {
-      console.log("Tentou passar turno fora da vez:", playerId);
-      return;
-    }
+    const nextPlayer = currentTurnSocket === p1.socketId ? p2 : p1;
 
-    match.turn = currentTurnSocket === p1.socketId ? p2.socketId : p1.socketId;
+    match.turn = nextPlayer.socketId;
     match.turnNumber = (match.turnNumber || 1) + 1;
+
+    nextPlayer.maxPE = Math.min(10, (nextPlayer.maxPE || 1) + 1);
+    nextPlayer.pe = nextPlayer.maxPE;
 
     io.to(p1.socketId).emit("match_update", match);
     io.to(p2.socketId).emit("match_update", match);
 
-    console.log("Turno avançado na partida:", matchId, "turno", match.turnNumber);
+    console.log("Turno avançado:", matchId, "turno", match.turnNumber);
   });
-
   socket.on("disconnect", () => {
     console.log("Socket desconectado:", socket.id);
 
