@@ -526,7 +526,68 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+let matchmakingQueue = [];
+let matches = {};
 
-app.listen(PORT, () => {
+const http = require("http");
+const { Server } = require("socket.io");
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*"
+  }
+});
+
+
+
+io.on("connection", (socket) => {
+  console.log("Jogador conectado:", socket.id);
+
+  socket.on("find_match", (playerData) => {
+    console.log("find_match de:", socket.id, playerData);
+
+    matchmakingQueue.push({
+      socketId: socket.id,
+      player: playerData
+    });
+
+    console.log("Fila atual:", matchmakingQueue.map(p => ({
+      socketId: p.socketId,
+      username: p.player?.username
+    })));
+
+    if (matchmakingQueue.length >= 2) {
+      const p1 = matchmakingQueue.shift();
+      const p2 = matchmakingQueue.shift();
+
+      const matchId = "match_" + Date.now();
+
+      matches[matchId] = {
+        id: matchId,
+        players: [
+          { socketId: p1.socketId, player: p1.player, life: 4 },
+          { socketId: p2.socketId, player: p2.player, life: 4 }
+        ],
+        turn: p1.socketId
+      };
+
+      console.log("Partida criada:", matchId);
+      console.log("P1:", p1.socketId, p1.player?.username);
+      console.log("P2:", p2.socketId, p2.player?.username);
+
+      io.to(p1.socketId).emit("match_found", matches[matchId]);
+      io.to(p2.socketId).emit("match_found", matches[matchId]);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Jogador desconectado:", socket.id);
+    matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+  });
+});
+
+server.listen(PORT, () => {
   console.log("Servidor rodando na porta " + PORT);
 });
