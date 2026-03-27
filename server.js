@@ -526,8 +526,7 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-let matchmakingQueue = [];
-let matches = {};
+
 
 const http = require("http");
 const { Server } = require("socket.io");
@@ -540,13 +539,18 @@ const io = new Server(server, {
   }
 });
 
-
+let matchmakingQueue = [];
+let matches = {};
 
 io.on("connection", (socket) => {
-  console.log("Jogador conectado:", socket.id);
+  console.log("Socket conectado:", socket.id);
 
   socket.on("find_match", (playerData) => {
-    console.log("find_match de:", socket.id, playerData);
+    console.log("find_match:", socket.id, playerData);
+
+    // evita duplicar o mesmo socket na fila
+    const alreadyInQueue = matchmakingQueue.some(p => p.socketId === socket.id);
+    if (alreadyInQueue) return;
 
     matchmakingQueue.push({
       socketId: socket.id,
@@ -567,27 +571,86 @@ io.on("connection", (socket) => {
       matches[matchId] = {
         id: matchId,
         players: [
-          { socketId: p1.socketId, player: p1.player, life: 4 },
-          { socketId: p2.socketId, player: p2.player, life: 4 }
+          {
+            socketId: p1.socketId,
+            player: p1.player,
+            life: 4
+          },
+          {
+            socketId: p2.socketId,
+            player: p2.player,
+            life: 4
+          }
         ],
-        turn: p1.socketId
+        turn: p1.socketId,
+        turnNumber: 1
       };
-
-      console.log("Partida criada:", matchId);
-      console.log("P1:", p1.socketId, p1.player?.username);
-      console.log("P2:", p2.socketId, p2.player?.username);
 
       io.to(p1.socketId).emit("match_found", matches[matchId]);
       io.to(p2.socketId).emit("match_found", matches[matchId]);
+
+      console.log("PARTIDA CRIADA:", matchId);
     }
   });
 
+  socket.on("end_turn", ({ matchId, playerId }) => {
+    const match = matches[matchId];
+    if (!match) return;
+
+    const p1 = match.players[0];
+    const p2 = match.players[1];
+
+    const currentTurnSocket = match.turn;
+
+    const playerSocket =
+      p1.player.id === playerId ? p1.socketId :
+      p2.player.id === playerId ? p2.socketId :
+      null;
+
+    if (!playerSocket) return;
+
+    // só quem está no turno pode passar
+    if (playerSocket !== currentTurnSocket) {
+      console.log("Tentou passar turno fora da vez:", playerId);
+      return;
+    }
+
+    match.turn = currentTurnSocket === p1.socketId ? p2.socketId : p1.socketId;
+    match.turnNumber = (match.turnNumber || 1) + 1;
+
+    io.to(p1.socketId).emit("match_update", match);
+    io.to(p2.socketId).emit("match_update", match);
+
+    console.log("Turno avançado na partida:", matchId, "turno", match.turnNumber);
+  });
+
   socket.on("disconnect", () => {
-    console.log("Jogador desconectado:", socket.id);
+    console.log("Socket desconectado:", socket.id);
+
     matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+
+    Object.keys(matches).forEach(matchId => {
+      const match = matches[matchId];
+      if (!match) return;
+
+      const playerInMatch = match.players.find(p => p.socketId === socket.id);
+      if (!playerInMatch) return;
+
+      const opponent = match.players.find(p => p.socketId !== socket.id);
+
+      if (opponent) {
+        io.to(opponent.socketId).emit("opponent_left", {
+          matchId,
+          message: "O adversário desconectou."
+        });
+      }
+
+      delete matches[matchId];
+      console.log("Partida encerrada por disconnect:", matchId);
+    });
   });
 });
 
 server.listen(PORT, () => {
-  console.log("Servidor rodando na porta " + PORT);
+  console.log("Servidor com SOCKET rodando na porta " + PORT);
 });
