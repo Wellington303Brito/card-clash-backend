@@ -128,14 +128,14 @@ P008: {
   emoji: "",
   cardClass: "unit",
   type: "Pusher",
-  rarity: "Basico",
+  rarity: "Básico",
   cost: 1,
   attackCost: 0,
   attack: 100,
   defense: 100,
   text: "Blitz - Pode realizar 2 ações por turno e pode se mover ou atacar no mesmo turno em que entra em campo.",
   effects: [
-    { trigger: "onSummon", id: "blitz" },
+    { trigger: "onSummon", id: "blitz" }
   ]
 },
 
@@ -162,7 +162,7 @@ P010: {
   emoji: "",
   cardClass: "unit",
   type: "Pusher",
-  rarity: "Básica",
+  rarity: "Básico",
   cost: 1,
   attackCost: 0,
   attack: 200,
@@ -194,7 +194,7 @@ P012: {
   emoji: "",
   cardClass: "unit",
   type: "Pusher",
-  rarity: "Básica",
+  rarity: "Básico",
   cost: 3,
   attackCost: 4,
   attack: 500,
@@ -209,7 +209,7 @@ P013: {
   emoji: "",
   cardClass: "unit",
   type: "Pusher",
-  rarity: "Básica",
+  rarity: "Básico",
   cost: 1,
   attackCost: 1,
   attack: 200,
@@ -251,7 +251,7 @@ P015: {
   defense: 500,
   text: "Blitz - Pode realizar 2 ações por turno e pode se mover ou atacar no mesmo turno em que entra em campo.",
   effects: [
-    { trigger: "onSummon", id: "blitz" },
+    { trigger: "onSummon", id: "blitz" }
   ]
 },
 P016: {
@@ -741,7 +741,7 @@ J020: {
   emoji: "",
   cardClass: "unit",
   type: "Juggernaut",
-  rarity: "Estraordinário",
+  rarity: "Extraordinário",
   cost: 8,
   attackCost: 8,
   attack: 2000,
@@ -1400,21 +1400,22 @@ E029: {
   },
 
   X005: {
-    id: "X005",
-    name: "Atrasar",
-    emoji: "⏳",
-    cardClass: "effect",
-    type: "Effect",
-    rarity: "Básico",
-    cost: 3,
-    attackCost: 0,
-    attack: 0,
-    defense: 0,
-    text: "Contramedida: a próxima unidade inimiga com Blitz volta para a mão.",
-    effects: [
-      { trigger: "onPlay", id: "delayCounter" }
-    ]
-  },
+  id: "X005",
+  name: "Atrasar",
+  emoji: "⏳",
+  cardClass: "effect",
+  type: "Effect",
+  rarity: "Básico",
+  cost: 3,
+  attackCost: 0,
+  attack: 0,
+  defense: 0,
+  isCounter: true,
+  text: "Contramedida: a próxima unidade inimiga com Blitz volta para a mão.",
+  effects: [
+    { trigger: "onPlay", id: "delayCounter" }
+  ]
+},
 
   X006: {
     id: "X006",
@@ -1467,22 +1468,23 @@ E029: {
     ]
   },
 
-  X009: {
-    id: "X009",
-    name: "Interceptar",
-    emoji: "🛡️",
-    cardClass: "effect",
-    type: "Effect",
-    rarity: "Comum",
-    cost: 3,
-    attackCost: 0,
-    attack: 0,
-    defense: 0,
-    text: "Contramedida: cancela o próximo efeito inimigo.",
-    effects: [
-      { trigger: "onPlay", id: "interceptCounter" }
-    ]
-  },
+ X009: {
+  id: "X009",
+  name: "Interceptar",
+  emoji: "🛡️",
+  cardClass: "effect",
+  type: "Effect",
+  rarity: "Comum",
+  cost: 3,
+  attackCost: 0,
+  attack: 0,
+  defense: 0,
+  isCounter: true,
+  text: "Contramedida: cancela o próximo efeito inimigo.",
+  effects: [
+    { trigger: "onPlay", id: "interceptCounter" }
+  ]
+},
 
   X010: {
     id: "X010",
@@ -1519,38 +1521,40 @@ E029: {
   },
 
   X012: {
-    id: "X012",
-    name: "Pânico",
-    emoji: "😱",
-    cardClass: "effect",
-    type: "Effect",
-    rarity: "Extraordinário",
-    cost: 5,
-    attackCost: 0,
-    attack: 0,
-    defense: 0,
-    text: "Contramedida: quando o oponente entrar no campo ativo, retorne para o banco.",
-    effects: [
-      { trigger: "onPlay", id: "panicCounter" }
-    ]
-  },
+  id: "X012",
+  name: "Pânico",
+  emoji: "😱",
+  cardClass: "effect",
+  type: "Effect",
+  rarity: "Extraordinário",
+  cost: 5,
+  attackCost: 0,
+  attack: 0,
+  defense: 0,
+  isCounter: true,
+  text: "Contramedida: quando o oponente entrar no campo ativo, retorne para o banco.",
+  effects: [
+    { trigger: "onPlay", id: "panicCounter" }
+  ]
+},
+
 
   X013: {
-    id: "X013",
-    name: "Devorador de Deuses",
-    emoji: "😱",
-    cardClass: "effect",
-    type: "Effect",
-    rarity: "Extraordinário",
-    cost: 9,
-    attackCost: 0,
-    attack: 0,
-    defense: 0,
-    text: "Efeito: Todos os jogadores Descartam todas as cartas em campos, o jogador qu usou paga 1PV",
-    effects: [
-      { trigger: "onPlay", id: "panicCounter" }
-    ]
-  },
+  id: "X013",
+  name: "Devorador de Deuses",
+  emoji: "☠️",
+  cardClass: "effect",
+  type: "Effect",
+  rarity: "Extraordinário",
+  cost: 9,
+  attackCost: 0,
+  attack: 0,
+  defense: 0,
+  text: "Efeito: todos os jogadores descartam todas as cartas em campo; quem usou perde 1 PV.",
+  effects: [
+    { trigger: "onPlay", id: "devourAllUnits" }
+  ]
+},
 
   X014: {
   id: "X014",
@@ -1597,11 +1601,13 @@ X016: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: A próxima carta de efeito inimiga é refletida.",
+  isCounter: true,
+  text: "Contramedida: a próxima carta de efeito inimiga é refletida.",
   effects: [
     { trigger: "onPlay", id: "mirrorCounter" }
   ]
 },
+
 
 X017: {
   id: "X017",
@@ -1614,11 +1620,13 @@ X017: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Se no último turno o oponente guardou PE, você recebe esse PE.",
+  isCounter: true,
+  text: "Contramedida: se no último turno o oponente guardou PE, você recebe esse PE.",
   effects: [
     { trigger: "onPlay", id: "stealSavedEnergy" }
   ]
 },
+
 
 X018: {
   id: "X018",
@@ -1714,11 +1722,13 @@ X023: {
   attackCost: 0,
   attack: 0,
   defense: 0,
+  isCounter: true,
   text: "Contramedida: a próxima unidade invocada pelo oponente entra no seu campo.",
   effects: [
     { trigger: "onPlay", id: "necronomiconCounter" }
   ]
 },
+
 
 X024: {
   id: "X024",
@@ -1781,11 +1791,13 @@ X027: {
   attackCost: 0,
   attack: 0,
   defense: 0,
+  isCounter: true,
   text: "Contramedida: se a próxima carta do oponente custar mais que 5 PE, descarte-a.",
   effects: [
     { trigger: "onPlay", id: "logisticsCutCounter", args: { maxCost: 5 } }
   ]
 },
+
 X028: {
   id: "X028",
   name: "Inverno Duradouro",
@@ -1814,11 +1826,13 @@ X029: {
   attackCost: 0,
   attack: 0,
   defense: 0,
+  isCounter: true,
   text: "Contramedida: ao sofrer um ataque, cause 300 de dano à carta atacante e, se você tiver uma unidade no banco, coloque-a no campo ativo.",
   effects: [
     { trigger: "onPlay", id: "divideAndConquerCounter" }
   ]
 },
+
 
 X030: {
   id: "X030",
@@ -1859,7 +1873,7 @@ X032: {
   emoji: "",
   cardClass: "effect",
   type: "Effect",
-  rarity: "Básica",
+  rarity: "Básico",
   cost: 5,
   attackCost: 0,
   attack: 0,
@@ -1928,11 +1942,14 @@ X036: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Se o oponente atacar no próximo turno dele, cause 900 de dano a uma unidade inimiga aleatória.",
+  isCounter: true,
+  text: "Contramedida: se o oponente atacar no próximo turno dele, cause 900 de dano a uma unidade inimiga aleatória.",
   effects: [
     { trigger: "onPlay", id: "incinerarTrap" }
   ]
 },
+
+
 X037: {
   id: "X037",
   name: "Cluster Antimatéria",
@@ -1944,11 +1961,13 @@ X037: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Cancele o efeito de uma carta. Se ela for Horizonte de Eventos ou Buraco de Minhoca, ganhe PE igual ao custo.",
+  isCounter: true,
+  text: "Contramedida: cancele o efeito de uma carta. Se ela for Horizonte de Eventos ou Buraco de Minhoca, ganhe PE igual ao custo.",
   effects: [
     { trigger: "onPlay", id: "clusterAntimateria" }
   ]
 },
+
 X038: {
   id: "X038",
   name: "Infecção Sideral",
@@ -2025,11 +2044,13 @@ X042: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Quando uma unidade sua for destruída em combate, a unidade atacante também é destruída.",
+  isCounter: true,
+  text: "Contramedida: quando uma unidade sua for destruída em combate, a unidade atacante também é destruída.",
   effects: [
     { trigger: "onPlay", id: "lokiGripCounter" }
   ]
 },
+
 X043: {
   id: "X043",
   name: "Terminus",
@@ -2041,11 +2062,13 @@ X043: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Se a próxima carta jogada pelo oponente tiver alguma propriedade, ela é descartada.",
+  isCounter: true,
+  text: "Contramedida: se a próxima carta jogada pelo oponente tiver alguma propriedade, ela é descartada.",
   effects: [
     { trigger: "onPlay", id: "terminusCounter" }
   ]
 },
+
 X044: {
   id: "X044",
   name: "Estimulantes",
@@ -2137,11 +2160,13 @@ X049: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: A próxima carta que o oponente comprar vai para sua mão.",
+  isCounter: true,
+  text: "Contramedida: a próxima carta que o oponente comprar vai para sua mão.",
   effects: [
     { trigger: "onPlay", id: "illegalDiversionCounter" }
   ]
 },
+
 X050: {
   id: "X050",
   name: "Blefar",
@@ -2153,11 +2178,13 @@ X050: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Quando você jogar uma carta de efeito e o oponente ativar uma contramedida, descarte a contramedida e mantenha seu efeito.",
+  isCounter: true,
+  text: "Contramedida: quando você jogar uma carta de efeito e o oponente ativar uma contramedida, descarte a contramedida e mantenha seu efeito.",
   effects: [
     { trigger: "onPlay", id: "blefarCounter" }
   ]
 },
+
 X051: {
   id: "X051",
   name: "Contrabando",
@@ -2329,11 +2356,13 @@ X061: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Escolha uma carta danificada. Ela fica com 0 de defesa até o fim do turno.",
+  isCounter: true,
+  text: "Contramedida: escolha uma carta danificada. Ela fica com 0 de defesa até o fim do turno.",
   effects: [
     { trigger: "onPlay", id: "rotTarget" }
   ]
 },
+
 X062: {
   id: "X062",
   name: "Chuva de Meteoros",
@@ -2361,11 +2390,13 @@ X063: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Se o oponente mover uma carta do banco para o campo, aplique Pin nela.",
+  isCounter: true,
+  text: "Contramedida: se o oponente mover uma carta do banco para o campo, aplique Pin nela.",
   effects: [
     { trigger: "onPlay", id: "armedNetCounter" }
   ]
 },
+
 X064: {
   id: "X064",
   name: "Contra-ataque Rápido",
@@ -2377,11 +2408,13 @@ X064: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Se no último turno o oponente atacou você, todas suas unidades ganham Blitz.",
+  isCounter: true,
+  text: "Contramedida: se no último turno o oponente atacou você, todas suas unidades ganham Blitz.",
   effects: [
     { trigger: "onPlay", id: "quickCounterAttack" }
   ]
 },
+
 X065: {
   id: "X065",
   name: "Resposta Rápida",
@@ -2393,11 +2426,13 @@ X065: {
   attackCost: 0,
   attack: 0,
   defense: 0,
-  text: "Contramedida: Durante o próximo turno do oponente, a primeira carta inimiga que atacar fica pinada permanentemente.",
+  isCounter: true,
+  text: "Contramedida: durante o próximo turno do oponente, a primeira carta inimiga que atacar fica pinada permanentemente.",
   effects: [
     { trigger: "onPlay", id: "quickResponseTrap" }
   ]
 },
+
 X066: {
   id: "X066",
   name: "SuperNova",
@@ -2427,7 +2462,7 @@ X067: {
   defense: 0,
   text: "Efeito: Escolha uma carta aliada essa carta agora está livre de quaisque efeitos causados por EF ou CM.",
   effects: [
-    
+    { trigger: "onPlay", id: "dandelionEffect" }
   ]
 },
 

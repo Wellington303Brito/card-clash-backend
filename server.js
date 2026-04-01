@@ -542,13 +542,101 @@ const io = new Server(server, {
 let matchmakingQueue = [];
 let matches = {};
 
+function shuffle(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function sanitizeCard(card) {
+  if (!card) return null;
+  return {
+    ...card,
+    defense: card.defense ?? card.health ?? 0,
+    rarity: card.rarity || card.raridade || "Básico",
+    emoji: card.emoji || "🃏"
+  };
+}
+
+function getPlayerSide(match, socketId) {
+  const p1 = match.players[0];
+  return p1.socketId === socketId ? "player" : "enemy";
+}
+
+function getBoardMapForSocket(match, socketId) {
+  const side = getPlayerSide(match, socketId);
+
+  if (side === "player") {
+    return {
+      ownBench: "bancoPlayer",
+      ownField: "campo1",
+      enemyField: "campo2",
+      enemyBench: "bancoEnemy"
+    };
+  }
+
+  return {
+    ownBench: "bancoEnemy",
+    ownField: "campo2",
+    enemyField: "campo1",
+    enemyBench: "bancoPlayer"
+  };
+}
+
+function serializeMatchForPlayer(match, socketId) {
+  const me = match.players.find(p => p.socketId === socketId);
+  const opponent = match.players.find(p => p.socketId !== socketId);
+  const map = getBoardMapForSocket(match, socketId);
+
+  return {
+    id: match.id,
+    turn: match.turn,
+    turnNumber: match.turnNumber,
+
+    players: [
+      {
+        socketId: me.socketId,
+        player: me.player,
+        life: me.life,
+        pe: me.pe,
+        maxPE: me.maxPE
+      },
+      {
+        socketId: opponent.socketId,
+        player: opponent.player,
+        life: opponent.life,
+        pe: opponent.pe,
+        maxPE: opponent.maxPE
+      }
+    ],
+
+    board: {
+      bancoPlayer: match.board[map.ownBench],
+      campo1: match.board[map.ownField],
+      campo2: match.board[map.enemyField],
+      bancoEnemy: match.board[map.enemyBench]
+    },
+
+    playerHand: match.hands[socketId] || [],
+    enemyHandCount: (match.hands[opponent.socketId] || []).length
+  };
+}
+
+function emitMatchUpdate(match) {
+  match.players.forEach(p => {
+    io.to(p.socketId).emit("match_update", serializeMatchForPlayer(match, p.socketId));
+  });
+}
+
 io.on("connection", (socket) => {
   console.log("Socket conectado:", socket.id);
 
   socket.on("find_match", (playerData) => {
     console.log("find_match:", socket.id, playerData);
 
-    // evita duplicar o mesmo socket na fila
     const alreadyInQueue = matchmakingQueue.some(p => p.socketId === socket.id);
     if (alreadyInQueue) return;
 
@@ -587,7 +675,24 @@ io.on("connection", (socket) => {
           }
         ],
         turn: p1.socketId,
-        turnNumber: 1
+        turnNumber: 1,
+
+        board: {
+          bancoPlayer: [],
+          campo1: [],
+          campo2: [],
+          bancoEnemy: []
+        },
+
+        hands: {
+          [p1.socketId]: [],
+          [p2.socketId]: []
+        },
+
+        decks: {
+          [p1.socketId]: [],
+          [p2.socketId]: []
+        }
       };
 
       io.to(p1.socketId).emit("match_found", matches[matchId]);
@@ -595,6 +700,61 @@ io.on("connection", (socket) => {
 
       console.log("PARTIDA CRIADA:", matchId);
     }
+  });
+
+  socket.on("set_match_deck", ({ matchId, deck }) => {
+    const match = matches[matchId];
+    if (!match) return;
+    if (!Array.isArray(deck)) return;
+
+    const normalizedDeck = deck
+      .map(id => CARD_DB[id])
+      .filter(Boolean)
+      .map(card => sanitizeCard({ ...card }));
+
+    match.decks[socket.id] = shuffle(normalizedDeck);
+    match.hands[socket.id] = [];
+
+    while (match.hands[socket.id].length < 3 && match.decks[socket.id].length > 0) {
+      match.hands[socket.id].push(match.decks[socket.id].pop());
+    }
+
+    emitMatchUpdate(match);
+  });
+
+  socket.on("play_card_to_bench", ({ matchId, handIndex }) => {
+    const match = matches[matchId];
+    if (!match) return;
+
+    if (match.turn !== socket.id) return;
+
+    const playerState = match.players.find(p => p.socketId === socket.id);
+    if (!playerState) return;
+
+    const hand = match.hands[socket.id] || [];
+    const card = hand[handIndex];
+    if (!card) return;
+
+    const map = getBoardMapForSocket(match, socket.id);
+    const benchZone = map.ownBench;
+
+    if (match.board[benchZone].length >= 6) return;
+
+    const cost = Number(card.cost || 0);
+    if ((playerState.pe || 0) < cost) return;
+
+    playerState.pe -= cost;
+    hand.splice(handIndex, 1);
+
+    match.board[benchZone].push({
+      owner: socket.id,
+      card: sanitizeCard({
+        ...card,
+        summonedTurn: match.turnNumber
+      })
+    });
+
+    emitMatchUpdate(match);
   });
 
   socket.on("end_turn", ({ matchId, playerId }) => {
@@ -620,11 +780,18 @@ io.on("connection", (socket) => {
     nextPlayer.maxPE = Math.min(10, (nextPlayer.maxPE || 1) + 1);
     nextPlayer.pe = nextPlayer.maxPE;
 
-    io.to(p1.socketId).emit("match_update", match);
-    io.to(p2.socketId).emit("match_update", match);
+    const nextDeck = match.decks[nextPlayer.socketId] || [];
+    const nextHand = match.hands[nextPlayer.socketId] || [];
+
+    if (nextDeck.length > 0 && nextHand.length < 10) {
+      nextHand.push(nextDeck.pop());
+    }
+
+    emitMatchUpdate(match);
 
     console.log("Turno avançado:", matchId, "turno", match.turnNumber);
   });
+
   socket.on("disconnect", () => {
     console.log("Socket desconectado:", socket.id);
 
