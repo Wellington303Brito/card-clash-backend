@@ -629,6 +629,7 @@ function emitMatchUpdate(match) {
   });
 }
 
+
 io.on("connection", (socket) => {
   console.log("Socket conectado:", socket.id);
 
@@ -743,6 +744,7 @@ io.on("connection", (socket) => {
 
     emitMatchUpdate(match);
   });
+  
 
   socket.on("end_turn", ({ matchId, playerId }) => {
     const match = matches[matchId];
