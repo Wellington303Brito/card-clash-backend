@@ -525,9 +525,6 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-
-
 const http = require("http");
 const { Server } = require("socket.io");
 
@@ -595,7 +592,6 @@ function serializeMatchForPlayer(match, socketId) {
     id: match.id,
     turn: match.turn,
     turnNumber: match.turnNumber,
-
     players: [
       {
         socketId: me.socketId,
@@ -612,22 +608,23 @@ function serializeMatchForPlayer(match, socketId) {
         maxPE: opponent.maxPE
       }
     ],
-
     board: {
       bancoPlayer: match.board[map.ownBench],
       campo1: match.board[map.ownField],
       campo2: match.board[map.enemyField],
       bancoEnemy: match.board[map.enemyBench]
     },
-
     playerHand: match.hands[socketId] || [],
     enemyHandCount: (match.hands[opponent.socketId] || []).length
   };
 }
 
 function emitMatchUpdate(match) {
-  match.players.forEach(p => {
-    io.to(p.socketId).emit("match_update", serializeMatchForPlayer(match, p.socketId));
+  match.players.forEach(playerState => {
+    io.to(playerState.socketId).emit(
+      "match_update",
+      serializeMatchForPlayer(match, playerState.socketId)
+    );
   });
 }
 
@@ -635,8 +632,6 @@ io.on("connection", (socket) => {
   console.log("Socket conectado:", socket.id);
 
   socket.on("find_match", (playerData) => {
-    console.log("find_match:", socket.id, playerData);
-
     const alreadyInQueue = matchmakingQueue.some(p => p.socketId === socket.id);
     if (alreadyInQueue) return;
 
@@ -644,11 +639,6 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       player: playerData
     });
-
-    console.log("Fila atual:", matchmakingQueue.map(p => ({
-      socketId: p.socketId,
-      username: p.player?.username
-    })));
 
     if (matchmakingQueue.length >= 2) {
       const p1 = matchmakingQueue.shift();
@@ -676,19 +666,16 @@ io.on("connection", (socket) => {
         ],
         turn: p1.socketId,
         turnNumber: 1,
-
         board: {
           bancoPlayer: [],
           campo1: [],
           campo2: [],
           bancoEnemy: []
         },
-
         hands: {
           [p1.socketId]: [],
           [p2.socketId]: []
         },
-
         decks: {
           [p1.socketId]: [],
           [p2.socketId]: []
@@ -725,7 +712,6 @@ io.on("connection", (socket) => {
   socket.on("play_card_to_bench", ({ matchId, handIndex }) => {
     const match = matches[matchId];
     if (!match) return;
-
     if (match.turn !== socket.id) return;
 
     const playerState = match.players.find(p => p.socketId === socket.id);
@@ -763,7 +749,6 @@ io.on("connection", (socket) => {
 
     const p1 = match.players[0];
     const p2 = match.players[1];
-
     const currentTurnSocket = match.turn;
 
     const currentPlayer =
@@ -788,13 +773,9 @@ io.on("connection", (socket) => {
     }
 
     emitMatchUpdate(match);
-
-    console.log("Turno avançado:", matchId, "turno", match.turnNumber);
   });
 
   socket.on("disconnect", () => {
-    console.log("Socket desconectado:", socket.id);
-
     matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
 
     Object.keys(matches).forEach(matchId => {
@@ -814,7 +795,6 @@ io.on("connection", (socket) => {
       }
 
       delete matches[matchId];
-      console.log("Partida encerrada por disconnect:", matchId);
     });
   });
 });
