@@ -524,6 +524,7 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro ao atualizar deck." });
   }
 });
+const PORT = process.env.PORT || 3000;
 
 const http = require("http");
 const { Server } = require("socket.io");
