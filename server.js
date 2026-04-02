@@ -673,6 +673,20 @@ function mapClientZoneToServerZone(match, socketId, clientZone) {
   return reverseMap[clientZone] || clientZone;
 }
 
+function canActThisTurn(card, match) {
+  if (!card) return false;
+
+  // blitz pode agir no turno em que foi invocada
+  if (card.blitz) return true;
+
+  // carta normal não pode agir no turno em que entrou
+  if (card.summonedTurn === match.turnNumber) {
+    return false;
+  }
+
+  return true;
+}
+
 io.on("connection", (socket) => {
   console.log("Socket conectado:", socket.id);
 
@@ -778,12 +792,14 @@ io.on("connection", (socket) => {
     hand.splice(handIndex, 1);
 
     match.board[benchZone].push({
-      owner: socket.id,
-      card: sanitizeCard({
-        ...card,
-        summonedTurn: match.turnNumber
-      })
-    });
+  owner: socket.id,
+  card: sanitizeCard({
+    ...card,
+    summonedTurn: match.turnNumber,
+    movedThisTurn: false,
+    attackedThisTurn: false
+  })
+});
 
     emitMatchUpdate(match);
   });
@@ -817,6 +833,14 @@ io.on("connection", (socket) => {
     if (nextDeck.length > 0 && nextHand.length < 10) {
       nextHand.push(nextDeck.pop());
     }
+    Object.keys(match.board).forEach(zone => {
+      match.board[zone].forEach(unit => {
+        if (unit.owner === nextPlayer.socketId && unit.card) {
+          unit.card.movedThisTurn = false;
+          unit.card.attackedThisTurn = false;
+        }
+      });
+    });
 
     emitMatchUpdate(match);
   });
@@ -849,12 +873,16 @@ io.on("connection", (socket) => {
   const unit = fromList[fromIndex];
   if (!unit) return;
   if (unit.owner !== socket.id) return;
+  if (!canActThisTurn(unit.card, match)) return;
+if (unit.card.movedThisTurn) return;
 
   if (serverFromZone === serverToZone) return;
   if (!areAdjacent(serverFromZone, serverToZone)) return;
   if (toList.length >= zoneLimits[serverToZone]) return;
 
   fromList.splice(fromIndex, 1);
+
+  unit.card.movedThisTurn = true;
   toList.push(unit);
 
   emitMatchUpdate(match);
@@ -881,11 +909,15 @@ socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetInde
   if (!attacker || !defender) return;
   if (attacker.owner !== socket.id) return;
   if (defender.owner === socket.id) return;
+  if (!canActThisTurn(attacker.card, match)) return;
+  if (attacker.card.attackedThisTurn) return;
 
   const atk = Number(attacker.card?.attack || 0);
   const def = Number(defender.card?.defense || 0);
 
   defender.card.defense = def - atk;
+
+  attacker.card.attackedThisTurn = true;
 
   if (defender.card.defense <= 0) {
     match.board[serverTargetZone].splice(targetIndex, 1);
@@ -903,6 +935,8 @@ socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
   const playerState = match.players.find(p => p.player.id === playerId);
   if (!playerState) return;
   if (playerState.socketId !== socket.id) return;
+  if (!canActThisTurn(attacker.card, match)) return;
+  if (attacker.card.attackedThisTurn) return;
 
   const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
   const zones = getPlayerZonesForSocket(match, socket.id);
@@ -921,6 +955,8 @@ socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
   if (!enemyPlayer) return;
 
   enemyPlayer.life = Math.max(0, (enemyPlayer.life || 0) - 1);
+
+  attacker.card.attackedThisTurn = true;
 
   emitMatchUpdate(match);
 });
