@@ -660,6 +660,19 @@ function getPlayerZonesForSocket(match, socketId) {
   };
 }
 
+function mapClientZoneToServerZone(match, socketId, clientZone) {
+  const zones = getPlayerZonesForSocket(match, socketId);
+
+  const reverseMap = {
+    bancoPlayer: zones.ownBench,
+    campo1: zones.ownField,
+    campo2: zones.enemyField,
+    bancoEnemy: zones.enemyBench
+  };
+
+  return reverseMap[clientZone] || clientZone;
+}
+
 io.on("connection", (socket) => {
   console.log("Socket conectado:", socket.id);
 
@@ -818,6 +831,9 @@ io.on("connection", (socket) => {
   if (!playerState) return;
   if (playerState.socketId !== socket.id) return;
 
+  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
+  const serverToZone = mapClientZoneToServerZone(match, socket.id, toZone);
+
   const zoneLimits = {
     bancoPlayer: 6,
     campo1: 4,
@@ -825,8 +841,8 @@ io.on("connection", (socket) => {
     bancoEnemy: 6
   };
 
-  const fromList = match.board[fromZone];
-  const toList = match.board[toZone];
+  const fromList = match.board[serverFromZone];
+  const toList = match.board[serverToZone];
 
   if (!Array.isArray(fromList) || !Array.isArray(toList)) return;
 
@@ -834,14 +850,9 @@ io.on("connection", (socket) => {
   if (!unit) return;
   if (unit.owner !== socket.id) return;
 
-  // só pode mover para zona adjacente
-  if (!areAdjacent(fromZone, toZone)) return;
-
-  // não move para a mesma zona
-  if (fromZone === toZone) return;
-
-  // respeita limite da zona
-  if (toList.length >= zoneLimits[toZone]) return;
+  if (serverFromZone === serverToZone) return;
+  if (!areAdjacent(serverFromZone, serverToZone)) return;
+  if (toList.length >= zoneLimits[serverToZone]) return;
 
   fromList.splice(fromIndex, 1);
   toList.push(unit);
@@ -859,17 +870,13 @@ socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetInde
   if (!playerState) return;
   if (playerState.socketId !== socket.id) return;
 
-  const zones = getPlayerZonesForSocket(match, socket.id);
+  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
+  const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
 
-  const allowedFrom = [zones.ownBench, zones.ownField];
-  const allowedTargets = [zones.enemyField, zones.enemyBench];
+  if (!areAdjacent(serverFromZone, serverTargetZone)) return;
 
-  if (!allowedFrom.includes(fromZone)) return;
-  if (!allowedTargets.includes(targetZone)) return;
-  if (!areAdjacent(fromZone, targetZone)) return;
-
-  const attacker = match.board[fromZone]?.[fromIndex];
-  const defender = match.board[targetZone]?.[targetIndex];
+  const attacker = match.board[serverFromZone]?.[fromIndex];
+  const defender = match.board[serverTargetZone]?.[targetIndex];
 
   if (!attacker || !defender) return;
   if (attacker.owner !== socket.id) return;
@@ -881,7 +888,7 @@ socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetInde
   defender.card.defense = def - atk;
 
   if (defender.card.defense <= 0) {
-    match.board[targetZone].splice(targetIndex, 1);
+    match.board[serverTargetZone].splice(targetIndex, 1);
   }
 
   emitMatchUpdate(match);
@@ -897,11 +904,12 @@ socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
   if (!playerState) return;
   if (playerState.socketId !== socket.id) return;
 
+  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
   const zones = getPlayerZonesForSocket(match, socket.id);
 
-  if (fromZone !== zones.ownField) return;
+  if (serverFromZone !== zones.ownField) return;
 
-  const attacker = match.board[fromZone]?.[fromIndex];
+  const attacker = match.board[serverFromZone]?.[fromIndex];
   if (!attacker) return;
   if (attacker.owner !== socket.id) return;
 
