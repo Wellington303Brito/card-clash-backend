@@ -893,7 +893,7 @@ io.on("connection", (socket) => {
   if (unit.card.movedThisTurn) return;
 
   if (serverFromZone === serverToZone) return;
-  const moveCost = Number(unit.card?.moveCost ?? 1);
+  const moveCost = Number(unit.card?.moveCost ?? unit.card?.cost ?? 1);
   
   if ((playerState.pe || 0) < moveCost) return;
   if (!areAdjacent(serverFromZone, serverToZone)) return;
