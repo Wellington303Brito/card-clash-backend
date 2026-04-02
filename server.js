@@ -655,7 +655,11 @@ function serializeMatchForPlayer(match, socketId) {
       bancoEnemy: match.board[map.enemyBench]
     },
     playerHand: match.hands[socketId] || [],
-    enemyHandCount: (match.hands[opponent.socketId] || []).length
+    enemyHandCount: (match.hands[opponent.socketId] || []).length,
+    graveyards: {
+      player: match.graveyards?.[socketId] || [],
+      enemy: match.graveyards?.[opponent.socketId] || []
+    }
   };
 }
 
@@ -966,74 +970,11 @@ io.on("connection", (socket) => {
   const card = hand[handIndex];
   if (!card) return;
 
-  // =========================
-  // CARTA DE EFEITO
-  // =========================
+  // carta de efeito não entra no banco
   if (card.cardClass === "effect") {
-  return;
-}
-
-  socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
-  const match = matches[matchId];
-  if (!match) return;
-  ensureMatchStructures(match);
-
-  if (match.turn !== socket.id) return;
-
-  const playerState = match.players.find(p => p.player.id === playerId);
-  if (!playerState) return;
-  if (playerState.socketId !== socket.id) return;
-
-  const hand = match.hands[socket.id] || [];
-  const card = hand[handIndex];
-  if (!card) return;
-  if (card.cardClass !== "effect") return;
-
-  const cost = Number(card.cost || 0);
-  if ((playerState.pe || 0) < cost) return;
-
-  let targetUnit = null;
-  let allyTarget = null;
-  let enemyTarget = null;
-
-  if (
-    targetZone !== null &&
-    targetZone !== undefined &&
-    targetIndex !== null &&
-    targetIndex !== undefined
-  ) {
-    const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
-    targetUnit = match.board[serverTargetZone]?.[targetIndex] || null;
-
-    if (targetUnit) {
-      targetUnit.zone = serverTargetZone;
-
-      if (targetUnit.owner === socket.id) allyTarget = targetUnit;
-      else enemyTarget = targetUnit;
-    }
+    return;
   }
 
-  playerState.pe -= cost;
-  hand.splice(handIndex, 1);
-
-  runEffects(card, "onPlay", {
-    state: match,
-    owner: socket.id,
-    sourceCard: card,
-    targetUnit,
-    allyTarget,
-    enemyTarget,
-    meta: {}
-  });
-
-  match.graveyards[socket.id].push(JSON.parse(JSON.stringify(card)));
-
-  emitMatchUpdate(match);
-});
-
-  // =========================
-  // UNIDADE
-  // =========================
   const map = getBoardMapForSocket(match, socket.id);
   const benchZone = map.ownBench;
 
@@ -1076,6 +1017,73 @@ io.on("connection", (socket) => {
 
   emitMatchUpdate(match);
 });
+
+
+
+
+  socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
+  const match = matches[matchId];
+  if (!match) return;
+  ensureMatchStructures(match);
+
+  if (match.turn !== socket.id) return;
+
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
+
+  const hand = match.hands[socket.id] || [];
+  const card = hand[handIndex];
+  if (!card) return;
+  if (card.cardClass !== "effect") return;
+
+  const cost = Number(card.cost || 0);
+  if ((playerState.pe || 0) < cost) return;
+
+  let targetUnit = null;
+  let allyTarget = null;
+  let enemyTarget = null;
+
+  if (
+    targetZone !== null &&
+    targetZone !== undefined &&
+    targetIndex !== null &&
+    targetIndex !== undefined
+  ) {
+    const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
+    targetUnit = match.board[serverTargetZone]?.[targetIndex] || null;
+
+    if (targetUnit) {
+      targetUnit.zone = serverTargetZone;
+
+      if (targetUnit.owner === socket.id) {
+        allyTarget = targetUnit;
+      } else {
+        enemyTarget = targetUnit;
+      }
+    }
+  }
+
+  playerState.pe -= cost;
+  hand.splice(handIndex, 1);
+
+  runEffects(card, "onPlay", {
+    state: match,
+    owner: socket.id,
+    sourceCard: card,
+    targetUnit,
+    allyTarget,
+    enemyTarget,
+    meta: {}
+  });
+
+  match.graveyards[socket.id].push(JSON.parse(JSON.stringify(card)));
+
+  emitMatchUpdate(match);
+});
+  });
+  
+
 
   socket.on("end_turn", ({ matchId, playerId }) => {
     const match = matches[matchId];
@@ -1270,29 +1278,25 @@ io.on("connection", (socket) => {
       }
     });
 
-    if (defender.card?.ambush) {
-      applyDamage(defender.card, attacker.card, defender.card.attack || 0);
-      defender.card.ambush = false;
+    if (Number(attacker.card.defense || 0) <= 0) {
+      runEffects(attacker.card, "onDefeat", {
+        state: match,
+        owner: attacker.owner,
+        sourceUnit: attacker,
+        sourceCard: attacker.card,
+        meta: {
+          attackerUnit: defender,
+          defenderUnit: attacker
+        }
+      });
 
-      if (Number(attacker.card.defense || 0) <= 0) {
-        runEffects(attacker.card, "onDefeat", {
-          state: match,
-          owner: attacker.owner,
-          sourceUnit: attacker,
-          sourceCard: attacker.card,
-          meta: {
-            attackerUnit: defender,
-            defenderUnit: attacker
-          }
-        });
-
-        defeatUnit(match, serverFromZone, attacker);
-        playerState.pe -= attackCost;
-        registerAction(attacker.card, "attack");
-        emitMatchUpdate(match);
-        return;
-      }
+      defeatUnit(match, serverFromZone, attacker);
+      playerState.pe -= attackCost;
+      registerAction(attacker.card, "attack");
+      emitMatchUpdate(match);
+      return;
     }
+    
 
     if (attacker.card?.ambush) {
       attacker.card.ambush = false;
@@ -1402,7 +1406,7 @@ io.on("connection", (socket) => {
       delete matches[matchId];
     });
   });
-});
+
 
 server.listen(PORT, () => {
   console.log("Servidor com SOCKET rodando na porta " + PORT);
