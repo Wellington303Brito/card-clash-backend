@@ -34,6 +34,35 @@ function normalizeRarity(rarity) {
   return "Básico";
 }
 
+async function unlockAllCards(playerId) {
+  const cardIds = Object.keys(CARD_DB);
+
+  for (const cardId of cardIds) {
+    await db.query(`
+      INSERT INTO player_cards (player_id, card_id, quantity)
+      VALUES (?, ?, 1)
+      ON DUPLICATE KEY UPDATE quantity = quantity + 1
+    `, [playerId, cardId]);
+  }
+}
+
+app.post("/debug/unlock-all", async (req, res) => {
+  try {
+    const { player_id } = req.body;
+
+    if (!player_id) {
+      return res.status(400).json({ error: "player_id é obrigatório" });
+    }
+
+    await unlockAllCards(player_id);
+
+    res.json({ success: true, message: "Todas as cartas foram liberadas." });
+  } catch (err) {
+    console.error("Erro ao liberar cartas:", err);
+    res.status(500).json({ error: "Erro ao liberar cartas." });
+  }
+});
+
 function rollRarity() {
   const random = Math.random() * 100;
   let accumulated = 0;
@@ -923,7 +952,11 @@ io.on("connection", (socket) => {
           [p2.socketId]: {}
         },
         globalEffects: [],
-        flags: {}
+        flags: {},
+        lastPlayedUnit: null,
+        lastPlayedEffect: null,
+        lastTurnSavedEnergy: {},
+        lastTurnAttackedBy: {}
       };
 
       io.to(p1.socketId).emit("match_found", matches[matchId]);
@@ -999,7 +1032,7 @@ io.on("connection", (socket) => {
       })
     };
 
-    match.board[benchZone].push(summonedUnit);
+    match.lastPlayedUnit = JSON.parse(JSON.stringify(summonedUnit));
 
     const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
 
@@ -1062,6 +1095,8 @@ io.on("connection", (socket) => {
     playerState.pe -= cost;
     hand.splice(handIndex, 1);
 
+    match.lastPlayedEffect = JSON.parse(JSON.stringify(card));
+
     runEffects(card, "onPlay", {
       state: match,
       owner: socket.id,
@@ -1073,6 +1108,8 @@ io.on("connection", (socket) => {
     });
 
     match.graveyards[socket.id].push(JSON.parse(JSON.stringify(card)));
+    if (!match.lastTurnAttackedBy) match.lastTurnAttackedBy = {};
+    match.lastTurnAttackedBy[socket.id] = true;
 
     emitMatchUpdate(match);
   });
@@ -1092,6 +1129,9 @@ io.on("connection", (socket) => {
     if (!currentPlayer) return;
     if (currentPlayer.socketId !== currentTurnSocket) return;
 
+    if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
+    match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
+
     const nextPlayer = currentTurnSocket === p1.socketId ? p2 : p1;
 
     Object.keys(match.board).forEach(zone => {
@@ -1107,6 +1147,9 @@ io.on("connection", (socket) => {
         }
       });
     });
+
+    if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
+    match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
 
     match.turn = nextPlayer.socketId;
     match.turnNumber = (match.turnNumber || 1) + 1;
@@ -1289,6 +1332,10 @@ io.on("connection", (socket) => {
         defeatUnit(match, serverFromZone, attacker);
         playerState.pe -= attackCost;
         registerAction(attacker.card, "attack");
+
+        if (!match.lastTurnAttackedBy) match.lastTurnAttackedBy = {};
+        match.lastTurnAttackedBy[socket.id] = true;
+
         emitMatchUpdate(match);
         return;
       }
