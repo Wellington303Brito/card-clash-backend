@@ -1034,6 +1034,8 @@ io.on("connection", (socket) => {
       })
     };
 
+    match.board[benchZone].push(summonedUnit);
+
     match.lastPlayedUnit = JSON.parse(JSON.stringify(summonedUnit));
 
     const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
