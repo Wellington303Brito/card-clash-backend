@@ -525,7 +525,6 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
 const http = require("http");
 const { Server } = require("socket.io");
 
@@ -957,133 +956,126 @@ io.on("connection", (socket) => {
   });
 
   socket.on("play_card_to_bench", ({ matchId, handIndex }) => {
-  const match = matches[matchId];
-  if (!match) return;
-  ensureMatchStructures(match);
+    const match = matches[matchId];
+    if (!match) return;
+    ensureMatchStructures(match);
 
-  if (match.turn !== socket.id) return;
+    if (match.turn !== socket.id) return;
 
-  const playerState = match.players.find(p => p.socketId === socket.id);
-  if (!playerState) return;
+    const playerState = match.players.find(p => p.socketId === socket.id);
+    if (!playerState) return;
 
-  const hand = match.hands[socket.id] || [];
-  const card = hand[handIndex];
-  if (!card) return;
+    const hand = match.hands[socket.id] || [];
+    const card = hand[handIndex];
+    if (!card) return;
 
-  // carta de efeito não entra no banco
-  if (card.cardClass === "effect") {
-    return;
-  }
-
-  const map = getBoardMapForSocket(match, socket.id);
-  const benchZone = map.ownBench;
-
-  if (match.board[benchZone].length >= 6) return;
-  if (match.flags?.noSummon) return;
-
-  const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
-  const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
-  if ((playerState.pe || 0) < cost) return;
-
-  playerState.pe -= cost;
-  hand.splice(handIndex, 1);
-
-  const summonedUnit = {
-    owner: socket.id,
-    zone: benchZone,
-    card: sanitizeCard({
-      ...card,
-      summonedTurn: match.turnNumber,
-      actionsUsedThisTurn: 0,
-      attacksUsedThisTurn: 0,
-      movedThisTurn: false,
-      attackedThisTurn: false
-    })
-  };
-
-  match.board[benchZone].push(summonedUnit);
-
-  const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
-
-  runEffects(summonedUnit.card, "onSummon", {
-    state: match,
-    owner: socket.id,
-    sourceUnit: summonedUnit,
-    sourceCard: summonedUnit.card,
-    meta: {
-      enemyId: enemyPlayer?.socketId || null
+    if (card.cardClass === "effect") {
+      return;
     }
+
+    const map = getBoardMapForSocket(match, socket.id);
+    const benchZone = map.ownBench;
+
+    if (match.board[benchZone].length >= 6) return;
+    if (match.flags?.noSummon) return;
+
+    const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
+    const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
+    if ((playerState.pe || 0) < cost) return;
+
+    playerState.pe -= cost;
+    hand.splice(handIndex, 1);
+
+    const summonedUnit = {
+      owner: socket.id,
+      zone: benchZone,
+      card: sanitizeCard({
+        ...card,
+        summonedTurn: match.turnNumber,
+        actionsUsedThisTurn: 0,
+        attacksUsedThisTurn: 0,
+        movedThisTurn: false,
+        attackedThisTurn: false
+      })
+    };
+
+    match.board[benchZone].push(summonedUnit);
+
+    const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
+
+    runEffects(summonedUnit.card, "onSummon", {
+      state: match,
+      owner: socket.id,
+      sourceUnit: summonedUnit,
+      sourceCard: summonedUnit.card,
+      meta: {
+        enemyId: enemyPlayer?.socketId || null
+      }
+    });
+
+    emitMatchUpdate(match);
   });
-
-  emitMatchUpdate(match);
-});
-
-
-
 
   socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
-  const match = matches[matchId];
-  if (!match) return;
-  ensureMatchStructures(match);
+    const match = matches[matchId];
+    if (!match) return;
+    ensureMatchStructures(match);
 
-  if (match.turn !== socket.id) return;
+    if (match.turn !== socket.id) return;
 
-  const playerState = match.players.find(p => p.player.id === playerId);
-  if (!playerState) return;
-  if (playerState.socketId !== socket.id) return;
+    const playerState = match.players.find(p => p.player.id === playerId);
+    if (!playerState) return;
+    if (playerState.socketId !== socket.id) return;
 
-  const hand = match.hands[socket.id] || [];
-  const card = hand[handIndex];
-  if (!card) return;
-  if (card.cardClass !== "effect") return;
+    const hand = match.hands[socket.id] || [];
+    const card = hand[handIndex];
+    if (!card) return;
+    if (card.cardClass !== "effect") return;
 
-  const cost = Number(card.cost || 0);
-  if ((playerState.pe || 0) < cost) return;
+    const cost = Number(card.cost || 0);
+    if ((playerState.pe || 0) < cost) return;
 
-  let targetUnit = null;
-  let allyTarget = null;
-  let enemyTarget = null;
+    let targetUnit = null;
+    let allyTarget = null;
+    let enemyTarget = null;
 
-  if (
-    targetZone !== null &&
-    targetZone !== undefined &&
-    targetIndex !== null &&
-    targetIndex !== undefined
-  ) {
-    const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
-    targetUnit = match.board[serverTargetZone]?.[targetIndex] || null;
+    if (
+      targetZone !== null &&
+      targetZone !== undefined &&
+      targetIndex !== null &&
+      targetIndex !== undefined
+    ) {
+      const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
+      targetUnit = match.board[serverTargetZone]?.[targetIndex] || null;
 
-    if (targetUnit) {
-      targetUnit.zone = serverTargetZone;
+      if (targetUnit) {
+        targetUnit.zone = serverTargetZone;
 
-      if (targetUnit.owner === socket.id) {
-        allyTarget = targetUnit;
-      } else {
-        enemyTarget = targetUnit;
+        if (targetUnit.owner === socket.id) {
+          allyTarget = targetUnit;
+        } else {
+          enemyTarget = targetUnit;
+        }
       }
     }
-  }
 
-  playerState.pe -= cost;
-  hand.splice(handIndex, 1);
+    playerState.pe -= cost;
+    hand.splice(handIndex, 1);
 
-  runEffects(card, "onPlay", {
-    state: match,
-    owner: socket.id,
-    sourceCard: card,
-    targetUnit,
-    allyTarget,
-    enemyTarget,
-    meta: {}
+    runEffects(card, "onPlay", {
+      state: match,
+      owner: socket.id,
+      sourceCard: card,
+      targetUnit,
+      allyTarget,
+      enemyTarget,
+      meta: {}
+    });
+
+    match.graveyards[socket.id].push(JSON.parse(JSON.stringify(card)));
+
+    emitMatchUpdate(match);
   });
-
-  match.graveyards[socket.id].push(JSON.parse(JSON.stringify(card)));
-
-  emitMatchUpdate(match);
-});
-  });
-  
-
 
   socket.on("end_turn", ({ matchId, playerId }) => {
     const match = matches[matchId];
@@ -1278,25 +1270,29 @@ io.on("connection", (socket) => {
       }
     });
 
-    if (Number(attacker.card.defense || 0) <= 0) {
-      runEffects(attacker.card, "onDefeat", {
-        state: match,
-        owner: attacker.owner,
-        sourceUnit: attacker,
-        sourceCard: attacker.card,
-        meta: {
-          attackerUnit: defender,
-          defenderUnit: attacker
-        }
-      });
+    if (defender.card?.ambush) {
+      applyDamage(defender.card, attacker.card, defender.card.attack || 0);
+      defender.card.ambush = false;
 
-      defeatUnit(match, serverFromZone, attacker);
-      playerState.pe -= attackCost;
-      registerAction(attacker.card, "attack");
-      emitMatchUpdate(match);
-      return;
+      if (Number(attacker.card.defense || 0) <= 0) {
+        runEffects(attacker.card, "onDefeat", {
+          state: match,
+          owner: attacker.owner,
+          sourceUnit: attacker,
+          sourceCard: attacker.card,
+          meta: {
+            attackerUnit: defender,
+            defenderUnit: attacker
+          }
+        });
+
+        defeatUnit(match, serverFromZone, attacker);
+        playerState.pe -= attackCost;
+        registerAction(attacker.card, "attack");
+        emitMatchUpdate(match);
+        return;
+      }
     }
-    
 
     if (attacker.card?.ambush) {
       attacker.card.ambush = false;
@@ -1406,7 +1402,7 @@ io.on("connection", (socket) => {
       delete matches[matchId];
     });
   });
-
+});
 
 server.listen(PORT, () => {
   console.log("Servidor com SOCKET rodando na porta " + PORT);
