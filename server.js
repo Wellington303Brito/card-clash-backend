@@ -46,20 +46,22 @@ async function unlockAllCards(playerId) {
   }
 }
 
-app.post("/debug/unlock-all", async (req, res) => {
+app.post("/debug/unlock-all", authenticateToken, async (req, res) => {
   try {
-    const { player_id } = req.body;
+    const playerId = req.player.id;
 
-    if (!player_id) {
-      return res.status(400).json({ error: "player_id é obrigatório" });
-    }
+    await unlockAllCards(playerId);
 
-    await unlockAllCards(player_id);
-
-    res.json({ success: true, message: "Todas as cartas foram liberadas." });
+    res.json({
+      success: true,
+      message: "Todas as cartas foram liberadas."
+    });
   } catch (err) {
     console.error("Erro ao liberar cartas:", err);
-    res.status(500).json({ error: "Erro ao liberar cartas." });
+    res.status(500).json({
+      error: "Erro ao liberar cartas.",
+      details: err.message
+    });
   }
 });
 
