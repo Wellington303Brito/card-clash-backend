@@ -818,14 +818,12 @@ io.on("connection", (socket) => {
   if (!playerState) return;
   if (playerState.socketId !== socket.id) return;
 
-  const zones = getPlayerZonesForSocket(match, socket.id);
-
-  const allowedFrom = [zones.ownBench, zones.ownField];
-  const allowedTo = [zones.ownBench, zones.ownField];
-
-  if (!allowedFrom.includes(fromZone)) return;
-  if (!allowedTo.includes(toZone)) return;
-  if (!areAdjacent(fromZone, toZone)) return;
+  const zoneLimits = {
+    bancoPlayer: 6,
+    campo1: 4,
+    campo2: 4,
+    bancoEnemy: 6
+  };
 
   const fromList = match.board[fromZone];
   const toList = match.board[toZone];
@@ -836,13 +834,13 @@ io.on("connection", (socket) => {
   if (!unit) return;
   if (unit.owner !== socket.id) return;
 
-  const zoneLimits = {
-    bancoPlayer: 6,
-    campo1: 4,
-    campo2: 4,
-    bancoEnemy: 6
-  };
+  // só pode mover para zona adjacente
+  if (!areAdjacent(fromZone, toZone)) return;
 
+  // não move para a mesma zona
+  if (fromZone === toZone) return;
+
+  // respeita limite da zona
   if (toList.length >= zoneLimits[toZone]) return;
 
   fromList.splice(fromIndex, 1);
