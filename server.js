@@ -953,61 +953,129 @@ io.on("connection", (socket) => {
   });
 
   socket.on("play_card_to_bench", ({ matchId, handIndex }) => {
-    const match = matches[matchId];
-    if (!match) return;
-    ensureMatchStructures(match);
+  const match = matches[matchId];
+  if (!match) return;
+  ensureMatchStructures(match);
 
-    if (match.turn !== socket.id) return;
+  if (match.turn !== socket.id) return;
 
-    const playerState = match.players.find(p => p.socketId === socket.id);
-    if (!playerState) return;
+  const playerState = match.players.find(p => p.socketId === socket.id);
+  if (!playerState) return;
 
-    const hand = match.hands[socket.id] || [];
-    const card = hand[handIndex];
-    if (!card) return;
+  const hand = match.hands[socket.id] || [];
+  const card = hand[handIndex];
+  if (!card) return;
 
-    const map = getBoardMapForSocket(match, socket.id);
-    const benchZone = map.ownBench;
+  // =========================
+  // CARTA DE EFEITO
+  // =========================
+  if (card.cardClass === "effect") {
+  return;
+}
 
-    if (match.board[benchZone].length >= 6) return;
-    if (match.flags?.noSummon) return;
+  socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
+  const match = matches[matchId];
+  if (!match) return;
+  ensureMatchStructures(match);
 
-    const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
-    const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
-    if ((playerState.pe || 0) < cost) return;
+  if (match.turn !== socket.id) return;
 
-    playerState.pe -= cost;
-    hand.splice(handIndex, 1);
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
 
-    const summonedUnit = {
-      owner: socket.id,
-      zone: benchZone,
-      card: sanitizeCard({
-        ...card,
-        summonedTurn: match.turnNumber,
-        actionsUsedThisTurn: 0,
-        attacksUsedThisTurn: 0,
-        movedThisTurn: false,
-        attackedThisTurn: false
-      })
-    };
+  const hand = match.hands[socket.id] || [];
+  const card = hand[handIndex];
+  if (!card) return;
+  if (card.cardClass !== "effect") return;
 
-    match.board[benchZone].push(summonedUnit);
+  const cost = Number(card.cost || 0);
+  if ((playerState.pe || 0) < cost) return;
 
-    const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
+  let targetUnit = null;
+  let allyTarget = null;
+  let enemyTarget = null;
 
-    runEffects(summonedUnit.card, "onSummon", {
-      state: match,
-      owner: socket.id,
-      sourceUnit: summonedUnit,
-      sourceCard: summonedUnit.card,
-      meta: {
-        enemyId: enemyPlayer?.socketId || null
-      }
-    });
+  if (
+    targetZone !== null &&
+    targetZone !== undefined &&
+    targetIndex !== null &&
+    targetIndex !== undefined
+  ) {
+    const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
+    targetUnit = match.board[serverTargetZone]?.[targetIndex] || null;
 
-    emitMatchUpdate(match);
+    if (targetUnit) {
+      targetUnit.zone = serverTargetZone;
+
+      if (targetUnit.owner === socket.id) allyTarget = targetUnit;
+      else enemyTarget = targetUnit;
+    }
+  }
+
+  playerState.pe -= cost;
+  hand.splice(handIndex, 1);
+
+  runEffects(card, "onPlay", {
+    state: match,
+    owner: socket.id,
+    sourceCard: card,
+    targetUnit,
+    allyTarget,
+    enemyTarget,
+    meta: {}
   });
+
+  match.graveyards[socket.id].push(JSON.parse(JSON.stringify(card)));
+
+  emitMatchUpdate(match);
+});
+
+  // =========================
+  // UNIDADE
+  // =========================
+  const map = getBoardMapForSocket(match, socket.id);
+  const benchZone = map.ownBench;
+
+  if (match.board[benchZone].length >= 6) return;
+  if (match.flags?.noSummon) return;
+
+  const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
+  const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
+  if ((playerState.pe || 0) < cost) return;
+
+  playerState.pe -= cost;
+  hand.splice(handIndex, 1);
+
+  const summonedUnit = {
+    owner: socket.id,
+    zone: benchZone,
+    card: sanitizeCard({
+      ...card,
+      summonedTurn: match.turnNumber,
+      actionsUsedThisTurn: 0,
+      attacksUsedThisTurn: 0,
+      movedThisTurn: false,
+      attackedThisTurn: false
+    })
+  };
+
+  match.board[benchZone].push(summonedUnit);
+
+  const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
+
+  runEffects(summonedUnit.card, "onSummon", {
+    state: match,
+    owner: socket.id,
+    sourceUnit: summonedUnit,
+    sourceCard: summonedUnit.card,
+    meta: {
+      enemyId: enemyPlayer?.socketId || null
+    }
+  });
+
+  emitMatchUpdate(match);
+});
 
   socket.on("end_turn", ({ matchId, playerId }) => {
     const match = matches[matchId];
