@@ -893,13 +893,21 @@ io.on("connection", (socket) => {
   if (unit.card.movedThisTurn) return;
 
   if (serverFromZone === serverToZone) return;
+  const moveCost = Number(unit.card?.moveCost ?? 1);
+  
+  if ((playerState.pe || 0) < moveCost) return;
   if (!areAdjacent(serverFromZone, serverToZone)) return;
   if (toList.length >= zoneLimits[serverToZone]) return;
+  if ((playerState.pe || 0) < moveCost) {
+  io.to(socket.id).emit("action_error", { message: "PE insuficiente para mover." });
+  return;
+}
 
   fromList.splice(fromIndex, 1);
 
   unit.card.actionUsedThisTurn = true;
   toList.push(unit);
+  playerState.pe -= moveCost;
 
   emitMatchUpdate(match);
 });
@@ -927,8 +935,14 @@ socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetInde
   if (defender.owner === socket.id) return;
 
   if (!canUseAction(attacker.card, match)) return;
+  const attackCost = Number(attacker.card?.attackCost ?? 0);
+  if ((playerState.pe || 0) < attackCost) return;
   if (!canActThisTurn(attacker.card, match)) return;
   if (attacker.card.attackedThisTurn) return;
+  if ((playerState.pe || 0) < attackCost) {
+  io.to(socket.id).emit("action_error", { message: "PE insuficiente para atacar." });
+  return;
+}
 
   const atk = Number(attacker.card?.attack || 0);
   const def = Number(defender.card?.defense || 0);
@@ -936,7 +950,7 @@ socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetInde
   defender.card.defense = def - atk;
 
   attacker.card.actionUsedThisTurn = true;
-
+  playerState.pe -= attackCost;
   if (defender.card.defense <= 0) {
     match.board[serverTargetZone].splice(targetIndex, 1);
   }
@@ -966,10 +980,15 @@ socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
   if (attacker.owner !== socket.id) return;
 
   if (!canUseAction(attacker.card, match)) return;
+  const attackCost = Number(attacker.card?.attackCost ?? 0);
+  if ((playerState.pe || 0) < attackCost) return;
 
   const enemyBench = match.board[zones.enemyBench];
   if (!Array.isArray(enemyBench)) return;
   if (enemyBench.length > 0) return;
+  socket.on("action_error", (data) => {
+  showWarning(data?.message || "Ação inválida.");
+});
 
   const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
   if (!enemyPlayer) return;
@@ -978,6 +997,7 @@ socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
 
   attacker.card.attackedThisTurn = true;
   attacker.card.actionUsedThisTurn = true;
+  playerState.pe -= attackCost;
 
   emitMatchUpdate(match);
 });
