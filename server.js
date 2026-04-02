@@ -629,6 +629,36 @@ function emitMatchUpdate(match) {
   });
 }
 
+function areAdjacent(zoneA, zoneB) {
+  const ADJ = {
+    bancoPlayer: ["campo1"],
+    campo1: ["bancoPlayer", "campo2"],
+    campo2: ["campo1", "bancoEnemy"],
+    bancoEnemy: ["campo2"]
+  };
+
+  return ADJ[zoneA]?.includes(zoneB);
+}
+
+function getPlayerZonesForSocket(match, socketId) {
+  const isP1 = match.players[0].socketId === socketId;
+
+  if (isP1) {
+    return {
+      ownBench: "bancoPlayer",
+      ownField: "campo1",
+      enemyField: "campo2",
+      enemyBench: "bancoEnemy"
+    };
+  }
+
+  return {
+    ownBench: "bancoEnemy",
+    ownField: "campo2",
+    enemyField: "campo1",
+    enemyBench: "bancoPlayer"
+  };
+}
 
 io.on("connection", (socket) => {
   console.log("Socket conectado:", socket.id);
@@ -777,6 +807,117 @@ io.on("connection", (socket) => {
 
     emitMatchUpdate(match);
   });
+
+  socket.on("move_card", ({ matchId, fromZone, fromIndex, toZone, playerId }) => {
+  const match = matches[matchId];
+  if (!match) return;
+
+  if (match.turn !== socket.id) return;
+
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
+
+  const zones = getPlayerZonesForSocket(match, socket.id);
+
+  const allowedFrom = [zones.ownBench, zones.ownField];
+  const allowedTo = [zones.ownBench, zones.ownField];
+
+  if (!allowedFrom.includes(fromZone)) return;
+  if (!allowedTo.includes(toZone)) return;
+  if (!areAdjacent(fromZone, toZone)) return;
+
+  const fromList = match.board[fromZone];
+  const toList = match.board[toZone];
+
+  if (!Array.isArray(fromList) || !Array.isArray(toList)) return;
+
+  const unit = fromList[fromIndex];
+  if (!unit) return;
+  if (unit.owner !== socket.id) return;
+
+  const zoneLimits = {
+    bancoPlayer: 6,
+    campo1: 4,
+    campo2: 4,
+    bancoEnemy: 6
+  };
+
+  if (toList.length >= zoneLimits[toZone]) return;
+
+  fromList.splice(fromIndex, 1);
+  toList.push(unit);
+
+  emitMatchUpdate(match);
+});
+
+socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetIndex, playerId }) => {
+  const match = matches[matchId];
+  if (!match) return;
+
+  if (match.turn !== socket.id) return;
+
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
+
+  const zones = getPlayerZonesForSocket(match, socket.id);
+
+  const allowedFrom = [zones.ownBench, zones.ownField];
+  const allowedTargets = [zones.enemyField, zones.enemyBench];
+
+  if (!allowedFrom.includes(fromZone)) return;
+  if (!allowedTargets.includes(targetZone)) return;
+  if (!areAdjacent(fromZone, targetZone)) return;
+
+  const attacker = match.board[fromZone]?.[fromIndex];
+  const defender = match.board[targetZone]?.[targetIndex];
+
+  if (!attacker || !defender) return;
+  if (attacker.owner !== socket.id) return;
+  if (defender.owner === socket.id) return;
+
+  const atk = Number(attacker.card?.attack || 0);
+  const def = Number(defender.card?.defense || 0);
+
+  defender.card.defense = def - atk;
+
+  if (defender.card.defense <= 0) {
+    match.board[targetZone].splice(targetIndex, 1);
+  }
+
+  emitMatchUpdate(match);
+});
+
+socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
+  const match = matches[matchId];
+  if (!match) return;
+
+  if (match.turn !== socket.id) return;
+
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
+
+  const zones = getPlayerZonesForSocket(match, socket.id);
+
+  if (fromZone !== zones.ownField) return;
+
+  const attacker = match.board[fromZone]?.[fromIndex];
+  if (!attacker) return;
+  if (attacker.owner !== socket.id) return;
+
+  const enemyBench = match.board[zones.enemyBench];
+  if (!Array.isArray(enemyBench)) return;
+  if (enemyBench.length > 0) return;
+
+  const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
+  if (!enemyPlayer) return;
+
+  enemyPlayer.life = Math.max(0, (enemyPlayer.life || 0) - 1);
+
+  emitMatchUpdate(match);
+});
 
   socket.on("disconnect", () => {
     matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
