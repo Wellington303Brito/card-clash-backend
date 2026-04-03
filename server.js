@@ -1483,46 +1483,53 @@ io.on("connection", (socket) => {
   });
 
   socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
-    const match = matches[matchId];
-    if (!match) return;
-    ensureMatchStructures(match);
+  const match = matches[matchId];
+  if (!match) return;
+  ensureMatchStructures(match);
 
-    const playerState = match.players.find(p => p.player.id === playerId);
-    if (!playerState) return;
-    if (playerState.socketId !== socket.id) return;
-    if (match.turnPlayerId !== playerState.player.id) return;
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
+  if (match.turnPlayerId !== playerState.player.id) return;
 
-    const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
-    const zones = getPlayerZonesForSocket(match, socket.id);
+  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
+  const zones = getPlayerZonesForSocket(match, socket.id);
 
-    if (serverFromZone !== zones.ownField) return;
+  // só pode atacar direto se estiver no campo avançado do jogador
+  if (serverFromZone !== zones.ownField) return;
 
-    const attacker = match.board[serverFromZone]?.[fromIndex];
-    if (!attacker) return;
-    if (attacker.owner !== socket.id) return;
-    if (!canUseAction(attacker.card, match, "attack")) return;
-    if (attacker.card.cannotAttackTurns > 0) return;
-    if (attacker.card.cannotActTurns > 0) return;
+  const attacker = match.board[serverFromZone]?.[fromIndex];
+  if (!attacker) return;
+  if (attacker.owner !== socket.id) return;
+  if (!canUseAction(attacker.card, match, "attack")) return;
+  if (attacker.card.cannotAttackTurns > 0) return;
+  if (attacker.card.cannotActTurns > 0) return;
 
-    const attackReduction = Number(match.turnEffects[socket.id]?.attackCostReduction || 0);
-    const attackCost = Math.max(0, Number(attacker.card?.attackCost ?? 0) - attackReduction);
+  const attackReduction = Number(match.turnEffects[socket.id]?.attackCostReduction || 0);
+  const attackCost = Math.max(0, Number(attacker.card?.attackCost ?? 0) - attackReduction);
 
-    if ((playerState.pe || 0) < attackCost) return;
+  if ((playerState.pe || 0) < attackCost) return;
 
-    const enemyBench = match.board[zones.enemyBench];
-    if (!Array.isArray(enemyBench)) return;
-    if (enemyBench.length > 0) return;
+  const enemyBench = match.board[zones.enemyBench];
+  if (!Array.isArray(enemyBench)) return;
 
-    const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
-    if (!enemyPlayer) return;
+  // se tiver alguém no banco inimigo, não pode atacar direto
+  if (enemyBench.length > 0) return;
 
-    enemyPlayer.life = Math.max(0, (enemyPlayer.life || 0) - 1);
+  const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
+  if (!enemyPlayer) return;
 
-    playerState.pe -= attackCost;
-    registerAction(attacker.card, "attack");
+  // causa 1 de dano por carta que atacou
+  enemyPlayer.life = Math.max(0, Number(enemyPlayer.life || 0) - 1);
 
-    emitMatchUpdate(match);
-  });
+  playerState.pe -= attackCost;
+  registerAction(attacker.card, "attack");
+
+  if (!match.lastTurnAttackedBy) match.lastTurnAttackedBy = {};
+  match.lastTurnAttackedBy[socket.id] = true;
+
+  emitMatchUpdate(match);
+});
 
  socket.on("disconnect", () => {
   matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
