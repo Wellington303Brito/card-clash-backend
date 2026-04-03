@@ -1257,55 +1257,101 @@ io.on("connection", (socket) => {
   });
 
   socket.on("move_card", ({ matchId, fromZone, fromIndex, toZone, playerId }) => {
-    const match = matches[matchId];
-    if (!match) return;
-    ensureMatchStructures(match);
+    try {
+    // todo o código aqui
+  } catch (err) {
+    console.error("ERRO em move_card:", err);
+  }
 
-    const playerState = match.players.find(p => p.player.id === playerId);
-    if (!playerState) return;
-    if (playerState.socketId !== socket.id) return;
-    if (match.turnPlayerId !== playerState.player.id) return;
+  console.log("MOVE_CARD recebido", { matchId, fromZone, fromIndex, toZone, playerId, socketId: socket.id });
 
-    const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
-    const serverToZone = mapClientZoneToServerZone(match, socket.id, toZone);
+  const match = matches[matchId];
+  if (!match) {
+    console.log("MOVE_CARD: match não encontrado");
+    return;
+  }
 
-    const zoneLimits = {
-      bancoPlayer: 6,
-      campo1: 4,
-      campo2: 4,
-      bancoEnemy: 6
-    };
+  ensureMatchStructures(match);
 
-    const fromList = match.board[serverFromZone];
-    const toList = match.board[serverToZone];
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) {
+    console.log("MOVE_CARD: playerState não encontrado");
+    return;
+  }
 
-    if (!Array.isArray(fromList) || !Array.isArray(toList)) return;
+  if (playerState.socketId !== socket.id) {
+    console.log("MOVE_CARD: socket diferente", { esperado: playerState.socketId, atual: socket.id });
+    return;
+  }
 
-    const unit = fromList[fromIndex];
-    if (!unit) return;
-    if (unit.owner !== socket.id) return;
-    if (!canUseAction(unit.card, match, "move")) return;
-    if (unit.card.cannotMoveTurns > 0) return;
-    if (unit.card.cannotActTurns > 0) return;
-    if (unit.card.noRetreat && serverToZone.includes("banco")) return;
+  if (match.turnPlayerId !== playerState.player.id) {
+    console.log("MOVE_CARD: não é o turno do jogador");
+    return;
+  }
 
-    const moveCost = Number(unit.card?.moveCost ?? unit.card?.cost ?? 1);
-    if ((playerState.pe || 0) < moveCost) return;
+  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
+  const serverToZone = mapClientZoneToServerZone(match, socket.id, toZone);
 
-    if (serverFromZone === serverToZone) return;
-    if (!areAdjacent(serverFromZone, serverToZone)) return;
-    if (toList.length >= zoneLimits[serverToZone]) return;
+  console.log("MOVE_CARD zones", { serverFromZone, serverToZone });
 
-    fromList.splice(fromIndex, 1);
+  const fromList = match.board[serverFromZone];
+  const toList = match.board[serverToZone];
 
-    playerState.pe -= moveCost;
-    registerAction(unit.card, "move");
+  if (!Array.isArray(fromList) || !Array.isArray(toList)) {
+    console.log("MOVE_CARD: zona inválida");
+    return;
+  }
 
-    unit.zone = serverToZone;
-    toList.push(unit);
+  const unit = fromList[fromIndex];
+  console.log("MOVE_CARD unit:", unit);
 
-    emitMatchUpdate(match);
-  });
+  if (!unit) {
+    console.log("MOVE_CARD: unidade não encontrada");
+    return;
+  }
+
+  if (unit.owner !== socket.id) {
+    console.log("MOVE_CARD: dono diferente");
+    return;
+  }
+
+  if (!canUseAction(unit.card, match, "move")) {
+    console.log("MOVE_CARD: canUseAction bloqueou");
+    return;
+  }
+
+  if (unit.card.cannotMoveTurns > 0) {
+    console.log("MOVE_CARD: cannotMoveTurns bloqueou");
+    return;
+  }
+
+  if (unit.card.cannotActTurns > 0) {
+    console.log("MOVE_CARD: cannotActTurns bloqueou");
+    return;
+  }
+
+  if (unit.card.noRetreat && serverToZone.includes("banco")) {
+    console.log("MOVE_CARD: noRetreat bloqueou");
+    return;
+  }
+
+  const moveCost = Number(unit.card?.moveCost ?? unit.card?.cost ?? 1);
+  if ((playerState.pe || 0) < moveCost) {
+    console.log("MOVE_CARD: PE insuficiente");
+    return;
+  }
+
+  console.log("MOVE_CARD: vai mover");
+
+  fromList.splice(fromIndex, 1);
+  playerState.pe -= moveCost;
+  registerAction(unit.card, "move");
+  unit.zone = serverToZone;
+  toList.push(unit);
+
+  console.log("MOVE_CARD: moveu com sucesso");
+  emitMatchUpdate(match);
+});
 
   socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetIndex, playerId }) => {
     const match = matches[matchId];
