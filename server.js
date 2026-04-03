@@ -991,6 +991,56 @@ io.on("connection", (socket) => {
     emitMatchUpdate(match);
   });
 
+  socket.on("restore_session", ({ playerId }) => {
+  Object.keys(matches).forEach(matchId => {
+    const match = matches[matchId];
+    if (!match) return;
+
+    const playerState = match.players.find(p => p.player.id === playerId);
+    if (!playerState) return;
+
+    const oldSocketId = playerState.socketId;
+    if (oldSocketId === socket.id) return;
+
+    playerState.socketId = socket.id;
+
+    if (match.hands[oldSocketId]) {
+      match.hands[socket.id] = match.hands[oldSocketId];
+      delete match.hands[oldSocketId];
+    }
+
+    if (match.decks[oldSocketId]) {
+      match.decks[socket.id] = match.decks[oldSocketId];
+      delete match.decks[oldSocketId];
+    }
+
+    if (match.graveyards[oldSocketId]) {
+      match.graveyards[socket.id] = match.graveyards[oldSocketId];
+      delete match.graveyards[oldSocketId];
+    }
+
+    if (match.counters[oldSocketId]) {
+      match.counters[socket.id] = match.counters[oldSocketId];
+      delete match.counters[oldSocketId];
+    }
+
+    if (match.turnEffects[oldSocketId]) {
+      match.turnEffects[socket.id] = match.turnEffects[oldSocketId];
+      delete match.turnEffects[oldSocketId];
+    }
+
+    Object.keys(match.board).forEach(zone => {
+      (match.board[zone] || []).forEach(unit => {
+        if (unit.owner === oldSocketId) {
+          unit.owner = socket.id;
+        }
+      });
+    });
+
+    emitMatchUpdate(match);
+  });
+});
+
   socket.on("play_card_to_bench", ({ matchId, handIndex }) => {
     const match = matches[matchId];
     if (!match) return;
@@ -1438,22 +1488,22 @@ io.on("connection", (socket) => {
     const playerInMatch = match.players.find(p => p.socketId === socket.id);
     if (!playerInMatch) return;
 
-    playerInMatch.disconnectedAt = Date.now();
+    const disconnectedPlayerId = playerInMatch.player.id;
 
     setTimeout(() => {
-      const currentMatch = matches[matchId];
-      if (!currentMatch) return;
+      const sameMatch = matches[matchId];
+      if (!sameMatch) return;
 
-      const samePlayer = currentMatch.players.find(
-        p => p.player.id === playerInMatch.player.id
+      const updatedPlayer = sameMatch.players.find(
+        p => p.player.id === disconnectedPlayerId
       );
-      if (!samePlayer) return;
+      if (!updatedPlayer) return;
 
-      const reconnected = samePlayer.socketId !== socket.id;
+      const reconnected = updatedPlayer.socketId !== socket.id;
       if (reconnected) return;
 
-      const opponent = currentMatch.players.find(
-        p => p.player.id !== playerInMatch.player.id
+      const opponent = sameMatch.players.find(
+        p => p.player.id !== disconnectedPlayerId
       );
 
       if (opponent) {
@@ -1464,9 +1514,9 @@ io.on("connection", (socket) => {
       }
 
       delete matches[matchId];
-    }, 15000);
+    }, 10000);
   });
-})
+});
 })
 
 server.listen(PORT, () => {
