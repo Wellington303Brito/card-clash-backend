@@ -661,7 +661,7 @@ function serializeMatchForPlayer(match, socketId) {
 
   return {
     id: match.id,
-    turn: match.turn,
+    turnPlayerId: match.turnPlayerId,
     turnNumber: match.turnNumber,
     players: [
       {
@@ -926,7 +926,7 @@ io.on("connection", (socket) => {
             maxPE: 1
           }
         ],
-        turn: p1.socketId,
+        turnPlayerId: p1.player.id,
         turnNumber: 1,
         board: {
           bancoPlayer: [],
@@ -996,10 +996,10 @@ io.on("connection", (socket) => {
     if (!match) return;
     ensureMatchStructures(match);
 
-    if (match.turn !== socket.id) return;
-
     const playerState = match.players.find(p => p.socketId === socket.id);
     if (!playerState) return;
+
+    if (match.turnPlayerId !== playerState.player.id) return;
 
     const hand = match.hands[socket.id] || [];
     const card = hand[handIndex];
@@ -1059,11 +1059,10 @@ io.on("connection", (socket) => {
     if (!match) return;
     ensureMatchStructures(match);
 
-    if (match.turn !== socket.id) return;
-
     const playerState = match.players.find(p => p.player.id === playerId);
     if (!playerState) return;
     if (playerState.socketId !== socket.id) return;
+    if (match.turnPlayerId !== playerState.player.id) return;
 
     const hand = match.hands[socket.id] || [];
     const card = hand[handIndex];
@@ -1126,18 +1125,18 @@ io.on("connection", (socket) => {
 
     const p1 = match.players[0];
     const p2 = match.players[1];
-    const currentTurnSocket = match.turn;
 
     const currentPlayer =
       p1.player.id === playerId ? p1 : p2.player.id === playerId ? p2 : null;
 
     if (!currentPlayer) return;
-    if (currentPlayer.socketId !== currentTurnSocket) return;
+    if (currentPlayer.socketId !== socket.id) return;
+    if (match.turnPlayerId !== currentPlayer.player.id) return;
 
     if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
     match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
 
-    const nextPlayer = currentTurnSocket === p1.socketId ? p2 : p1;
+    const nextPlayer = currentPlayer.player.id === p1.player.id ? p2 : p1;
 
     Object.keys(match.board).forEach(zone => {
       (match.board[zone] || []).forEach(unit => {
@@ -1156,7 +1155,7 @@ io.on("connection", (socket) => {
     if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
     match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
 
-    match.turn = nextPlayer.socketId;
+    match.turnPlayerId = nextPlayer.player.id;
     match.turnNumber = (match.turnNumber || 1) + 1;
 
     nextPlayer.maxPE = Math.min(10, (nextPlayer.maxPE || 1) + 1);
@@ -1212,11 +1211,10 @@ io.on("connection", (socket) => {
     if (!match) return;
     ensureMatchStructures(match);
 
-    if (match.turn !== socket.id) return;
-
     const playerState = match.players.find(p => p.player.id === playerId);
     if (!playerState) return;
     if (playerState.socketId !== socket.id) return;
+    if (match.turnPlayerId !== playerState.player.id) return;
 
     const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
     const serverToZone = mapClientZoneToServerZone(match, socket.id, toZone);
@@ -1264,11 +1262,10 @@ io.on("connection", (socket) => {
     if (!match) return;
     ensureMatchStructures(match);
 
-    if (match.turn !== socket.id) return;
-
     const playerState = match.players.find(p => p.player.id === playerId);
     if (!playerState) return;
     if (playerState.socketId !== socket.id) return;
+    if (match.turnPlayerId !== playerState.player.id) return;
 
     const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
     const serverTargetZone = mapClientZoneToServerZone(match, socket.id, targetZone);
@@ -1394,11 +1391,10 @@ io.on("connection", (socket) => {
     if (!match) return;
     ensureMatchStructures(match);
 
-    if (match.turn !== socket.id) return;
-
     const playerState = match.players.find(p => p.player.id === playerId);
     if (!playerState) return;
     if (playerState.socketId !== socket.id) return;
+    if (match.turnPlayerId !== playerState.player.id) return;
 
     const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
     const zones = getPlayerZonesForSocket(match, socket.id);
