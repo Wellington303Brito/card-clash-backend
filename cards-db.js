@@ -25,7 +25,7 @@ const CARD_DB = {
     attackCost: 3,
     attack: 500,
     defense: 300,
-    text: "Blitz - Pode realizar 2 ações por turno e pode se mover ou atacar no mesmo turno em que entra em campo.",
+    text: "Blitz",
     effects: [
       { trigger: "onSummon", id: "blitz" }
     ]
@@ -105,21 +105,20 @@ P006: {
   ]
 },
  P007: {
-  id: "P007",
-  name: "Jäger",
-  emoji: "🎯",
-  cardClass: "unit",
-  type: "Pusher",
-  rarity: "Comum",
-  cost: 4,
-  attackCost: 5,
-  attack: 600,
-  defense: 600,
-  text: "Blitz - Pode realizar 2 ações por turno e pode se mover ou atacar no mesmo turno em que entra em campo. Pin - As unidades atingidas por esta carta ficam Pinned por 1 turno.",
-
-  effects: [
+    id: "P007",
+    name: "Jäger",
+    emoji: "🎯",
+    cardClass: "unit",
+    type: "Pusher",
+    rarity: "Comum",
+    cost: 4,
+    attackCost: 5,
+    attack: 600,
+    defense: 600,
+    text: "Blitz + Pin",
+    effects: [
     { trigger: "onSummon", id: "blitz" },
-    { trigger: "onSummon", id: "pinStrike", args: { turns: 1 } }
+    { trigger: "onAttack", id: "pinStrike", args: { turns: 1 } }
   ]
 },
 P008: {
@@ -150,7 +149,7 @@ P009: {
   attackCost: 4,
   attack: 500,
   defense: 700,
-  text: "Blitz - Pode realizar 2 ações por turno e pode se mover ou atacar no mesmo turno em que entra em campo.",
+  text: "Retorna todas as unidades inimigas para a mão.",
   effects: [
     { trigger: "onSummon", id: "mobilize", args: { amount: 2 } },
     { trigger: "onSummon", id: "returnAllEnemyUnitsToHand" }
@@ -230,12 +229,11 @@ P014: {
   attackCost: 3,
   attack: 500,
   defense: 500,
-  text: "Pin - As unidades atingidas por esta carta ficam Pinned por 1 turno. Enquanto esta carta estiver em campo, nenhum jogador pode invocar unidades.",
-
+  text: "Bloqueia invocação + Pin",
   effects: [
     { trigger: "onSummon", id: "eternumLockField" },
     { trigger: "onDefeat", id: "eternumUnlockField" },
-    { trigger: "onSummon", id: "pinStrike", args:{turns:1} }
+    { trigger: "onAttack", id: "pinStrike", args: { turns: 1 } }
   ]
 },
 P015: {
@@ -400,10 +398,10 @@ P024: {
   attackCost: 5,
   attack: 1200,
   defense: 800,
-  text: "Ambush - Quando atacada, causa o dano da carta antes do atacante. Se o atacante for destruído, esta carta não sofre dano. Ambush é perdido após o primeiro ataque sofrido ou se esta unidade atacar primeiro. Pin - As unidades atingidas por esta carta ficam Pinned por 1 turno. Quando atacar, causa 500 de dano em tropas adjacentes.",
+  text: "Ambush + Pin + Splash",
   effects: [
     { trigger: "onSummon", id: "grantAmbush" },
-    { trigger: "onSummon", id: "pinStrike", args: { turns: 1 } },
+    { trigger: "onAttack", id: "pinStrike", args: { turns: 1 } },
     { trigger: "onAttack", id: "warMachineSplash", args: { damage: 500 } }
   ]
 },
@@ -815,11 +813,10 @@ J024: {
   attackCost: 5,
   attack: 1000,
   defense: 1000,
-  tags: [],
-  text: "Blitz - Pode realizar 2 ações por turno e pode se mover ou atacar no mesmo turno em que entra em campo. Pin - As unidades atingidas por esta carta ficam Pinned por 1 turno. Esta carta é imune a qualquer dano de unidade.",
+  text: "Blitz + Pin + Imune",
   effects: [
     { trigger: "onSummon", id: "blitz" },
-    { trigger: "onSummon", id: "pinStrike", args: { turns: 1 } },
+    { trigger: "onAttack", id: "pinStrike", args: { turns: 1 } },
     { trigger: "onSummon", id: "unitDamageImmunity" }
   ]
 },
