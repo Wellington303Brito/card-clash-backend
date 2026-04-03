@@ -1428,17 +1428,33 @@ io.on("connection", (socket) => {
     emitMatchUpdate(match);
   });
 
-  socket.on("disconnect", () => {
-    matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+ socket.on("disconnect", () => {
+  matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
 
-    Object.keys(matches).forEach(matchId => {
-      const match = matches[matchId];
-      if (!match) return;
+  Object.keys(matches).forEach(matchId => {
+    const match = matches[matchId];
+    if (!match) return;
 
-      const playerInMatch = match.players.find(p => p.socketId === socket.id);
-      if (!playerInMatch) return;
+    const playerInMatch = match.players.find(p => p.socketId === socket.id);
+    if (!playerInMatch) return;
 
-      const opponent = match.players.find(p => p.socketId !== socket.id);
+    playerInMatch.disconnectedAt = Date.now();
+
+    setTimeout(() => {
+      const currentMatch = matches[matchId];
+      if (!currentMatch) return;
+
+      const samePlayer = currentMatch.players.find(
+        p => p.player.id === playerInMatch.player.id
+      );
+      if (!samePlayer) return;
+
+      const reconnected = samePlayer.socketId !== socket.id;
+      if (reconnected) return;
+
+      const opponent = currentMatch.players.find(
+        p => p.player.id !== playerInMatch.player.id
+      );
 
       if (opponent) {
         io.to(opponent.socketId).emit("opponent_left", {
@@ -1448,9 +1464,10 @@ io.on("connection", (socket) => {
       }
 
       delete matches[matchId];
-    });
+    }, 15000);
   });
-});
+})
+})
 
 server.listen(PORT, () => {
   console.log("Servidor com SOCKET rodando na porta " + PORT);
