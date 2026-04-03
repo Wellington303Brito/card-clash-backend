@@ -224,7 +224,7 @@ function runEffects(card, trigger, ctx) {
       continue;
     }
 
-    fn({
+    fn.call(EFFECTS, {
       ...ctx,
       ...(effect.args || {})
     });
