@@ -211,26 +211,29 @@ thiefDrainEnergy(ctx) {
 // =============================
 // EXECUTOR BACKEND
 // =============================
-function runEffects(card, trigger, ctx) {
-  if (!card?.effects) return;
+// ... (suas funções de efeitos existentes)
+
+function runEffects(card, trigger, ctx = {}) {
+  if (!card || !card.effects) return true;
 
   for (const effect of card.effects) {
     if (effect.trigger !== trigger) continue;
 
+    // Procura a função dentro do objeto EFFECTS
     const fn = EFFECTS[effect.id];
-
-    if (!fn) {
-      console.log("Efeito não encontrado:", effect.id);
-      continue;
+    if (typeof fn === "function") {
+      console.log(`Executando efeito: ${effect.id} para ${card.name}`);
+      fn(ctx, effect);
     }
-
-    fn.call(EFFECTS, {
-      ...ctx,
-      ...(effect.args || {})
-    });
   }
+  return true;
 }
 
-module.exports = {
-  runEffects
-};
+// ESSENCIAL: Exportar para o Node.js (server.js) conseguir usar
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { EFFECTS, runEffects };
+}
+  
+
+
+

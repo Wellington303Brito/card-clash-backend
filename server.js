@@ -1041,20 +1041,25 @@ io.on("connection", (socket) => {
   });
 });
 
-  socket.on("play_card_to_bench", ({ matchId, handIndex }) => {
-    const match = matches[matchId];
+  socket.on("play_card_to_bench", ({ cardId, slotIndex }) => {
+    const match = matches[currentPlayer.matchId];
     if (!match) return;
     ensureMatchStructures(match);
 
     const playerState = match.players.find(p => p.socketId === socket.id);
     if (!playerState) return;
 
+    // Verifica se é o turno do jogador
     if (match.turnPlayerId !== playerState.player.id) return;
 
+    // CORREÇÃO: Usando o slotIndex enviado pelo cliente para identificar a carta na mão
     const hand = match.hands[socket.id] || [];
+    const handIndex = slotIndex; 
     const card = hand[handIndex];
+    
     if (!card) return;
 
+    // Se for carta de efeito, não entra no banco como unidade
     if (card.cardClass === "effect") {
       return;
     }
@@ -1062,16 +1067,24 @@ io.on("connection", (socket) => {
     const map = getBoardMapForSocket(match, socket.id);
     const benchZone = map.ownBench;
 
+    // Verificações de limite e regras
     if (match.board[benchZone].length >= 6) return;
     if (match.flags?.noSummon) return;
 
+    // Cálculo de custo com desconto
     const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
     const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
-    if ((playerState.pe || 0) < cost) return;
+    
+    if ((playerState.pe || 0) < cost) {
+        console.log("PE insuficiente");
+        return;
+    }
 
+    // Deduz o custo e remove da mão
     playerState.pe -= cost;
     hand.splice(handIndex, 1);
 
+    // Criação da unidade no tabuleiro
     const summonedUnit = {
       owner: socket.id,
       zone: benchZone,
@@ -1085,24 +1098,22 @@ io.on("connection", (socket) => {
       })
     };
 
-    match.board[benchZone].push(summonedUnit);
-
-    match.lastPlayedUnit = JSON.parse(JSON.stringify(summonedUnit));
-
-    const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
-
-    runEffects(summonedUnit.card, "onSummon", {
-      state: match,
-      owner: socket.id,
-      sourceUnit: summonedUnit,
-      sourceCard: summonedUnit.card,
-      meta: {
-        enemyId: enemyPlayer?.socketId || null
-      }
+    // --- PARTE CORRIGIDA: ATIVAÇÃO DOS EFEITOS ---
+    // Chamamos o runEffects ANTES de enviar o update para o cliente
+    // O contexto (ctx) contém tudo que as funções em effects.js precisam
+    runEffects(summonedUnit.card, "onSummon", { 
+        state: match, 
+        owner: socket.id, 
+        unit: summonedUnit 
     });
+    // --------------------------------------------
 
+    // Adiciona ao banco e atualiza todos os jogadores
+    match.board[benchZone].push(summonedUnit);
+    
+    console.log(`${card.name} invocada por ${socket.id}`);
     emitMatchUpdate(match);
-  });
+});
 
   socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
     const match = matches[matchId];
