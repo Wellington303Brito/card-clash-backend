@@ -992,71 +992,72 @@ io.on("connection", (socket) => {
   });
 
   socket.on("restore_session", ({ playerId }) => {
-  Object.keys(matches).forEach(matchId => {
-    const match = matches[matchId];
-    if (!match) return;
+    Object.keys(matches).forEach(matchId => {
+      const match = matches[matchId];
+      if (!match) return;
 
-    const playerState = match.players.find(p => p.player.id === playerId);
-    if (!playerState) return;
+      const playerState = match.players.find(p => p.player.id === playerId);
+      if (!playerState) return;
 
-    const oldSocketId = playerState.socketId;
-    if (oldSocketId === socket.id) return;
+      const oldSocketId = playerState.socketId;
+      if (oldSocketId === socket.id) return;
 
-    playerState.socketId = socket.id;
+      playerState.socketId = socket.id;
 
-    if (match.hands[oldSocketId]) {
-      match.hands[socket.id] = match.hands[oldSocketId];
-      delete match.hands[oldSocketId];
-    }
+      if (match.hands[oldSocketId]) {
+        match.hands[socket.id] = match.hands[oldSocketId];
+        delete match.hands[oldSocketId];
+      }
 
-    if (match.decks[oldSocketId]) {
-      match.decks[socket.id] = match.decks[oldSocketId];
-      delete match.decks[oldSocketId];
-    }
+      if (match.decks[oldSocketId]) {
+        match.decks[socket.id] = match.decks[oldSocketId];
+        delete match.decks[oldSocketId];
+      }
 
-    if (match.graveyards[oldSocketId]) {
-      match.graveyards[socket.id] = match.graveyards[oldSocketId];
-      delete match.graveyards[oldSocketId];
-    }
+      if (match.graveyards[oldSocketId]) {
+        match.graveyards[socket.id] = match.graveyards[oldSocketId];
+        delete match.graveyards[oldSocketId];
+      }
 
-    if (match.counters[oldSocketId]) {
-      match.counters[socket.id] = match.counters[oldSocketId];
-      delete match.counters[oldSocketId];
-    }
+      if (match.counters[oldSocketId]) {
+        match.counters[socket.id] = match.counters[oldSocketId];
+        delete match.counters[oldSocketId];
+      }
 
-    if (match.turnEffects[oldSocketId]) {
-      match.turnEffects[socket.id] = match.turnEffects[oldSocketId];
-      delete match.turnEffects[oldSocketId];
-    }
+      if (match.turnEffects[oldSocketId]) {
+        match.turnEffects[socket.id] = match.turnEffects[oldSocketId];
+        delete match.turnEffects[oldSocketId];
+      }
 
-    Object.keys(match.board).forEach(zone => {
-      (match.board[zone] || []).forEach(unit => {
-        if (unit.owner === oldSocketId) {
-          unit.owner = socket.id;
-        }
+      Object.keys(match.board).forEach(zone => {
+        (match.board[zone] || []).forEach(unit => {
+          if (unit.owner === oldSocketId) {
+            unit.owner = socket.id;
+          }
+        });
       });
+
+      emitMatchUpdate(match);
     });
-
-    emitMatchUpdate(match);
   });
-});
 
-  socket.on("play_card_to_bench", ({ cardId, slotIndex }) => {
-    const match = matches[currentPlayer.matchId];
-    if (!match) return;
-    ensureMatchStructures(match);
+  socket.on("play_card_to_bench", ({ matchId, cardId, slotIndex, playerId }) => {
+  const match = matches[matchId];
+  if (!match) return;
 
-    const playerState = match.players.find(p => p.socketId === socket.id);
-    if (!playerState) return;
+  const playerState = match.players.find(p => p.player.id === playerId);
+  if (!playerState) return;
+  if (playerState.socketId !== socket.id) return;
+  if (match.turnPlayerId !== playerState.player.id) return;
 
     // Verifica se é o turno do jogador
     if (match.turnPlayerId !== playerState.player.id) return;
 
     // CORREÇÃO: Usando o slotIndex enviado pelo cliente para identificar a carta na mão
     const hand = match.hands[socket.id] || [];
-    const handIndex = slotIndex; 
+    const handIndex = slotIndex;
     const card = hand[handIndex];
-    
+
     if (!card) return;
 
     // Se for carta de efeito, não entra no banco como unidade
@@ -1074,10 +1075,10 @@ io.on("connection", (socket) => {
     // Cálculo de custo com desconto
     const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
     const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
-    
+
     if ((playerState.pe || 0) < cost) {
-        console.log("PE insuficiente");
-        return;
+      console.log("PE insuficiente");
+      return;
     }
 
     // Deduz o custo e remove da mão
@@ -1101,19 +1102,19 @@ io.on("connection", (socket) => {
     // --- PARTE CORRIGIDA: ATIVAÇÃO DOS EFEITOS ---
     // Chamamos o runEffects ANTES de enviar o update para o cliente
     // O contexto (ctx) contém tudo que as funções em effects.js precisam
-    runEffects(summonedUnit.card, "onSummon", { 
-        state: match, 
-        owner: socket.id, 
-        unit: summonedUnit 
+    runEffects(summonedUnit.card, "onSummon", {
+      state: match,
+      owner: socket.id,
+      unit: summonedUnit
     });
     // --------------------------------------------
 
     // Adiciona ao banco e atualiza todos os jogadores
     match.board[benchZone].push(summonedUnit);
-    
+
     console.log(`${card.name} invocada por ${socket.id}`);
     emitMatchUpdate(match);
-});
+  });
 
   socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
     const match = matches[matchId];
@@ -1181,23 +1182,27 @@ io.on("connection", (socket) => {
 
   socket.on("end_turn", ({ matchId, playerId }) => {
     const match = matches[matchId];
-    if (!match) return;
-    ensureMatchStructures(match);
+if (!match) return;
 
-    const p1 = match.players[0];
-    const p2 = match.players[1];
+const p1 = match.players[0];
+const p2 = match.players[1];
 
-    const currentPlayer =
-      p1.player.id === playerId ? p1 : p2.player.id === playerId ? p2 : null;
+const currentPlayer =
+  p1.player.id === playerId ? p1 :
+  p2.player.id === playerId ? p2 :
+  null;
 
-    if (!currentPlayer) return;
-    if (currentPlayer.socketId !== socket.id) return;
-    if (match.turnPlayerId !== currentPlayer.player.id) return;
+if (!currentPlayer) return;
+if (currentPlayer.socketId !== socket.id) return;
+if (match.turnPlayerId !== currentPlayer.player.id) return;
 
-    if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
-    match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
+// salvar energia
+if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
+match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
 
-    const nextPlayer = currentPlayer.player.id === p1.player.id ? p2 : p1;
+// próximo jogador
+const nextPlayer =
+  currentPlayer.player.id === p1.player.id ? p2 : p1;
 
     Object.keys(match.board).forEach(zone => {
       (match.board[zone] || []).forEach(unit => {
@@ -1214,7 +1219,7 @@ io.on("connection", (socket) => {
     });
 
     if (!match.lastTurnSavedEnergy) match.lastTurnSavedEnergy = {};
-    match.lastTurnSavedEnergy[socket.id] = currentPlayer.pe || 0;
+   
 
     match.turnPlayerId = nextPlayer.player.id;
     match.turnNumber = (match.turnNumber || 1) + 1;
@@ -1269,100 +1274,100 @@ io.on("connection", (socket) => {
 
   socket.on("move_card", ({ matchId, fromZone, fromIndex, toZone, playerId }) => {
     try {
-    // todo o código aqui
-  } catch (err) {
-    console.error("ERRO em move_card:", err);
-  }
+      // todo o código aqui
+    } catch (err) {
+      console.error("ERRO em move_card:", err);
+    }
 
-  console.log("MOVE_CARD recebido", { matchId, fromZone, fromIndex, toZone, playerId, socketId: socket.id });
+    console.log("MOVE_CARD recebido", { matchId, fromZone, fromIndex, toZone, playerId, socketId: socket.id });
 
-  const match = matches[matchId];
-  if (!match) {
-    console.log("MOVE_CARD: match não encontrado");
-    return;
-  }
+    const match = matches[matchId];
+    if (!match) {
+      console.log("MOVE_CARD: match não encontrado");
+      return;
+    }
 
-  ensureMatchStructures(match);
+    ensureMatchStructures(match);
 
-  const playerState = match.players.find(p => p.player.id === playerId);
-  if (!playerState) {
-    console.log("MOVE_CARD: playerState não encontrado");
-    return;
-  }
+    const playerState = match.players.find(p => p.player.id === playerId);
+    if (!playerState) {
+      console.log("MOVE_CARD: playerState não encontrado");
+      return;
+    }
 
-  if (playerState.socketId !== socket.id) {
-    console.log("MOVE_CARD: socket diferente", { esperado: playerState.socketId, atual: socket.id });
-    return;
-  }
+    if (playerState.socketId !== socket.id) {
+      console.log("MOVE_CARD: socket diferente", { esperado: playerState.socketId, atual: socket.id });
+      return;
+    }
 
-  if (match.turnPlayerId !== playerState.player.id) {
-    console.log("MOVE_CARD: não é o turno do jogador");
-    return;
-  }
+    if (match.turnPlayerId !== playerState.player.id) {
+      console.log("MOVE_CARD: não é o turno do jogador");
+      return;
+    }
 
-  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
-  const serverToZone = mapClientZoneToServerZone(match, socket.id, toZone);
+    const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
+    const serverToZone = mapClientZoneToServerZone(match, socket.id, toZone);
 
-  console.log("MOVE_CARD zones", { serverFromZone, serverToZone });
+    console.log("MOVE_CARD zones", { serverFromZone, serverToZone });
 
-  const fromList = match.board[serverFromZone];
-  const toList = match.board[serverToZone];
+    const fromList = match.board[serverFromZone];
+    const toList = match.board[serverToZone];
 
-  if (!Array.isArray(fromList) || !Array.isArray(toList)) {
-    console.log("MOVE_CARD: zona inválida");
-    return;
-  }
+    if (!Array.isArray(fromList) || !Array.isArray(toList)) {
+      console.log("MOVE_CARD: zona inválida");
+      return;
+    }
 
-  const unit = fromList[fromIndex];
-  console.log("MOVE_CARD unit:", unit);
+    const unit = fromList[fromIndex];
+    console.log("MOVE_CARD unit:", unit);
 
-  if (!unit) {
-    console.log("MOVE_CARD: unidade não encontrada");
-    return;
-  }
+    if (!unit) {
+      console.log("MOVE_CARD: unidade não encontrada");
+      return;
+    }
 
-  if (unit.owner !== socket.id) {
-    console.log("MOVE_CARD: dono diferente");
-    return;
-  }
+    if (unit.owner !== socket.id) {
+      console.log("MOVE_CARD: dono diferente");
+      return;
+    }
 
-  if (!canUseAction(unit.card, match, "move")) {
-    console.log("MOVE_CARD: canUseAction bloqueou");
-    return;
-  }
+    if (!canUseAction(unit.card, match, "move")) {
+      console.log("MOVE_CARD: canUseAction bloqueou");
+      return;
+    }
 
-  if (unit.card.cannotMoveTurns > 0) {
-    console.log("MOVE_CARD: cannotMoveTurns bloqueou");
-    return;
-  }
+    if (unit.card.cannotMoveTurns > 0) {
+      console.log("MOVE_CARD: cannotMoveTurns bloqueou");
+      return;
+    }
 
-  if (unit.card.cannotActTurns > 0) {
-    console.log("MOVE_CARD: cannotActTurns bloqueou");
-    return;
-  }
+    if (unit.card.cannotActTurns > 0) {
+      console.log("MOVE_CARD: cannotActTurns bloqueou");
+      return;
+    }
 
-  if (unit.card.noRetreat && serverToZone.includes("banco")) {
-    console.log("MOVE_CARD: noRetreat bloqueou");
-    return;
-  }
+    if (unit.card.noRetreat && serverToZone.includes("banco")) {
+      console.log("MOVE_CARD: noRetreat bloqueou");
+      return;
+    }
 
-  const moveCost = Number(unit.card?.moveCost ?? unit.card?.cost ?? 1);
-  if ((playerState.pe || 0) < moveCost) {
-    console.log("MOVE_CARD: PE insuficiente");
-    return;
-  }
+    const moveCost = Number(unit.card?.moveCost ?? unit.card?.cost ?? 1);
+    if ((playerState.pe || 0) < moveCost) {
+      console.log("MOVE_CARD: PE insuficiente");
+      return;
+    }
 
-  console.log("MOVE_CARD: vai mover");
+    console.log("MOVE_CARD: vai mover");
 
-  fromList.splice(fromIndex, 1);
-  playerState.pe -= moveCost;
-  registerAction(unit.card, "move");
-  unit.zone = serverToZone;
-  toList.push(unit);
+    fromList.splice(fromIndex, 1);
+    playerState.pe -= moveCost;
+    registerAction(unit.card, "move");
+    unit.zone = serverToZone;
+    toList.push(unit);
 
-  console.log("MOVE_CARD: moveu com sucesso");
-  emitMatchUpdate(match);
-});
+    console.log("MOVE_CARD: moveu com sucesso");
+    emitMatchUpdate(match);
+  });
 
   socket.on("attack_card", ({ matchId, fromZone, fromIndex, targetZone, targetIndex, playerId }) => {
     const match = matches[matchId];
@@ -1494,93 +1499,93 @@ io.on("connection", (socket) => {
   });
 
   socket.on("direct_attack", ({ matchId, fromZone, fromIndex, playerId }) => {
-  const match = matches[matchId];
-  if (!match) return;
-  ensureMatchStructures(match);
-
-  const playerState = match.players.find(p => p.player.id === playerId);
-  if (!playerState) return;
-  if (playerState.socketId !== socket.id) return;
-  if (match.turnPlayerId !== playerState.player.id) return;
-
-  const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
-  const zones = getPlayerZonesForSocket(match, socket.id);
-
-  // só pode atacar direto se estiver no campo avançado do jogador
-  if (serverFromZone !== zones.ownField) return;
-
-  const attacker = match.board[serverFromZone]?.[fromIndex];
-  if (!attacker) return;
-  if (attacker.owner !== socket.id) return;
-  if (!canUseAction(attacker.card, match, "attack")) return;
-  if (attacker.card.cannotAttackTurns > 0) return;
-  if (attacker.card.cannotActTurns > 0) return;
-
-  const attackReduction = Number(match.turnEffects[socket.id]?.attackCostReduction || 0);
-  const attackCost = Math.max(0, Number(attacker.card?.attackCost ?? 0) - attackReduction);
-
-  if ((playerState.pe || 0) < attackCost) return;
-
-  const enemyBench = match.board[zones.enemyBench];
-  if (!Array.isArray(enemyBench)) return;
-
-  // se tiver alguém no banco inimigo, não pode atacar direto
-  if (enemyBench.length > 0) return;
-
-  const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
-  if (!enemyPlayer) return;
-
-  // causa 1 de dano por carta que atacou
-  enemyPlayer.life = Math.max(0, Number(enemyPlayer.life || 0) - 1);
-
-  playerState.pe -= attackCost;
-  registerAction(attacker.card, "attack");
-
-  if (!match.lastTurnAttackedBy) match.lastTurnAttackedBy = {};
-  match.lastTurnAttackedBy[socket.id] = true;
-
-  emitMatchUpdate(match);
-});
-
- socket.on("disconnect", () => {
-  matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
-
-  Object.keys(matches).forEach(matchId => {
     const match = matches[matchId];
     if (!match) return;
+    ensureMatchStructures(match);
 
-    const playerInMatch = match.players.find(p => p.socketId === socket.id);
-    if (!playerInMatch) return;
+    const playerState = match.players.find(p => p.player.id === playerId);
+    if (!playerState) return;
+    if (playerState.socketId !== socket.id) return;
+    if (match.turnPlayerId !== playerState.player.id) return;
 
-    const disconnectedPlayerId = playerInMatch.player.id;
+    const serverFromZone = mapClientZoneToServerZone(match, socket.id, fromZone);
+    const zones = getPlayerZonesForSocket(match, socket.id);
 
-    setTimeout(() => {
-      const sameMatch = matches[matchId];
-      if (!sameMatch) return;
+    // só pode atacar direto se estiver no campo avançado do jogador
+    if (serverFromZone !== zones.ownField) return;
 
-      const updatedPlayer = sameMatch.players.find(
-        p => p.player.id === disconnectedPlayerId
-      );
-      if (!updatedPlayer) return;
+    const attacker = match.board[serverFromZone]?.[fromIndex];
+    if (!attacker) return;
+    if (attacker.owner !== socket.id) return;
+    if (!canUseAction(attacker.card, match, "attack")) return;
+    if (attacker.card.cannotAttackTurns > 0) return;
+    if (attacker.card.cannotActTurns > 0) return;
 
-      const reconnected = updatedPlayer.socketId !== socket.id;
-      if (reconnected) return;
+    const attackReduction = Number(match.turnEffects[socket.id]?.attackCostReduction || 0);
+    const attackCost = Math.max(0, Number(attacker.card?.attackCost ?? 0) - attackReduction);
 
-      const opponent = sameMatch.players.find(
-        p => p.player.id !== disconnectedPlayerId
-      );
+    if ((playerState.pe || 0) < attackCost) return;
 
-      if (opponent) {
-        io.to(opponent.socketId).emit("opponent_left", {
-          matchId,
-          message: "O adversário desconectou."
-        });
-      }
+    const enemyBench = match.board[zones.enemyBench];
+    if (!Array.isArray(enemyBench)) return;
 
-      delete matches[matchId];
-    }, 10000);
+    // se tiver alguém no banco inimigo, não pode atacar direto
+    if (enemyBench.length > 0) return;
+
+    const enemyPlayer = match.players.find(p => p.socketId !== socket.id);
+    if (!enemyPlayer) return;
+
+    // causa 1 de dano por carta que atacou
+    enemyPlayer.life = Math.max(0, Number(enemyPlayer.life || 0) - 1);
+
+    playerState.pe -= attackCost;
+    registerAction(attacker.card, "attack");
+
+    if (!match.lastTurnAttackedBy) match.lastTurnAttackedBy = {};
+    match.lastTurnAttackedBy[socket.id] = true;
+
+    emitMatchUpdate(match);
   });
-});
+
+  socket.on("disconnect", () => {
+    matchmakingQueue = matchmakingQueue.filter(p => p.socketId !== socket.id);
+
+    Object.keys(matches).forEach(matchId => {
+      const match = matches[matchId];
+      if (!match) return;
+
+      const playerInMatch = match.players.find(p => p.socketId === socket.id);
+      if (!playerInMatch) return;
+
+      const disconnectedPlayerId = playerInMatch.player.id;
+
+      setTimeout(() => {
+        const sameMatch = matches[matchId];
+        if (!sameMatch) return;
+
+        const updatedPlayer = sameMatch.players.find(
+          p => p.player.id === disconnectedPlayerId
+        );
+        if (!updatedPlayer) return;
+
+        const reconnected = updatedPlayer.socketId !== socket.id;
+        if (reconnected) return;
+
+        const opponent = sameMatch.players.find(
+          p => p.player.id !== disconnectedPlayerId
+        );
+
+        if (opponent) {
+          io.to(opponent.socketId).emit("opponent_left", {
+            matchId,
+            message: "O adversário desconectou."
+          });
+        }
+
+        delete matches[matchId];
+      }, 10000);
+    });
+  });
 })
 
 server.listen(PORT, () => {
