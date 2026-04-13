@@ -1048,12 +1048,14 @@ io.on("connection", (socket) => {
   const playerEntry = match.players.find(p => p.player.id === playerId);
   if (!playerEntry) return;
 
+  if (playerEntry.socketId !== socket.id) return;
   if (match.turnPlayerId !== playerId) return;
 
-  const hand = playerEntry.hand;
+  const hand = match.hands[socket.id]; // ✅ CORRETO
   if (!hand || !hand[handIndex]) return;
 
   const card = hand[handIndex];
+
   if (card.cardClass === "effect") return;
 
   const isPlayer1 = match.players[0].player.id === playerId;
@@ -1061,40 +1063,38 @@ io.on("connection", (socket) => {
 
   if (match.board[zone].length >= 6) return;
 
-  const cost = card.cost || 0;
-  if (playerEntry.pe < cost) return;
+  const cost = Number(card.cost || 0);
+  if ((playerEntry.pe || 0) < cost) return;
 
+  // paga custo
   playerEntry.pe -= cost;
 
   // remove da mão
   hand.splice(handIndex, 1);
 
-  // adiciona no board
-  match.board[zone].push({
-    card,
-    owner: playerId
+  // cria unidade
+  const unit = {
+    card: sanitizeCard({ ...card }),
+    owner: socket.id,
+    summonedTurn: match.turnNumber
+  };
+
+  // adiciona no banco
+  match.board[zone].push(unit);
+
+  // ativa efeito de summon
+  runEffects(unit.card, "onSummon", {
+    state: match,
+    owner: socket.id,
+    sourceUnit: unit,
+    sourceCard: unit.card,
+    meta: {}
   });
 
-  io.to(matchId).emit("match_update", match);
+  console.log("Carta jogada no banco:", card.name);
 
-
-
-    // --- PARTE CORRIGIDA: ATIVAÇÃO DOS EFEITOS ---
-    // Chamamos o runEffects ANTES de enviar o update para o cliente
-    // O contexto (ctx) contém tudo que as funções em effects.js precisam
-    runEffects(summonedUnit.card, "onSummon", {
-      state: match,
-      owner: socket.id,
-      unit: summonedUnit
-    });
-    // --------------------------------------------
-
-    // Adiciona ao banco e atualiza todos os jogadores
-    match.board[benchZone].push(summonedUnit);
-
-    console.log(`${card.name} invocada por ${socket.id}`);
-    emitMatchUpdate(match);
-  });
+  emitMatchUpdate(match);
+});
 
   socket.on("play_effect_card", ({ matchId, handIndex, targetZone, targetIndex, playerId }) => {
     const match = matches[matchId];
