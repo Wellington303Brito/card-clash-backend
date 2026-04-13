@@ -1041,63 +1041,43 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("play_card_to_bench", ({ matchId, cardId, slotIndex, playerId }) => {
+  socket.on("play_card_to_bench", ({ matchId, playerId, handIndex }) => {
   const match = matches[matchId];
   if (!match) return;
 
-  const playerState = match.players.find(p => p.player.id === playerId);
-  if (!playerState) return;
-  if (playerState.socketId !== socket.id) return;
-  if (match.turnPlayerId !== playerState.player.id) return;
+  const playerEntry = match.players.find(p => p.player.id === playerId);
+  if (!playerEntry) return;
 
-    // Verifica se é o turno do jogador
-    if (match.turnPlayerId !== playerState.player.id) return;
+  if (match.turnPlayerId !== playerId) return;
 
-    // CORREÇÃO: Usando o slotIndex enviado pelo cliente para identificar a carta na mão
-    const hand = match.hands[socket.id] || [];
-    const handIndex = slotIndex;
-    const card = hand[handIndex];
+  const hand = playerEntry.hand;
+  if (!hand || !hand[handIndex]) return;
 
-    if (!card) return;
+  const card = hand[handIndex];
+  if (card.cardClass === "effect") return;
 
-    // Se for carta de efeito, não entra no banco como unidade
-    if (card.cardClass === "effect") {
-      return;
-    }
+  const isPlayer1 = match.players[0].player.id === playerId;
+  const zone = isPlayer1 ? "bancoPlayer" : "bancoEnemy";
 
-    const map = getBoardMapForSocket(match, socket.id);
-    const benchZone = map.ownBench;
+  if (match.board[zone].length >= 6) return;
 
-    // Verificações de limite e regras
-    if (match.board[benchZone].length >= 6) return;
-    if (match.flags?.noSummon) return;
+  const cost = card.cost || 0;
+  if (playerEntry.pe < cost) return;
 
-    // Cálculo de custo com desconto
-    const mobilizeDiscount = getMobilizeDiscount(match, socket.id);
-    const cost = Math.max(0, Number(card.cost || 0) - mobilizeDiscount);
+  playerEntry.pe -= cost;
 
-    if ((playerState.pe || 0) < cost) {
-      console.log("PE insuficiente");
-      return;
-    }
+  // remove da mão
+  hand.splice(handIndex, 1);
 
-    // Deduz o custo e remove da mão
-    playerState.pe -= cost;
-    hand.splice(handIndex, 1);
+  // adiciona no board
+  match.board[zone].push({
+    card,
+    owner: playerId
+  });
 
-    // Criação da unidade no tabuleiro
-    const summonedUnit = {
-      owner: socket.id,
-      zone: benchZone,
-      card: sanitizeCard({
-        ...card,
-        summonedTurn: match.turnNumber,
-        actionsUsedThisTurn: 0,
-        attacksUsedThisTurn: 0,
-        movedThisTurn: false,
-        attackedThisTurn: false
-      })
-    };
+  io.to(matchId).emit("match_update", match);
+
+
 
     // --- PARTE CORRIGIDA: ATIVAÇÃO DOS EFEITOS ---
     // Chamamos o runEffects ANTES de enviar o update para o cliente
