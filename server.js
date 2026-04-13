@@ -703,6 +703,38 @@ function emitMatchUpdate(match) {
   });
 }
 
+function finishMatch(matchId, loserPlayerId, reason = "surrender") {
+  const match = matches[matchId];
+  if (!match) return;
+
+  const loser = match.players.find(p => p.player.id === loserPlayerId);
+  const winner = match.players.find(p => p.player.id !== loserPlayerId);
+
+  if (loser) {
+    io.to(loser.socketId).emit("match_finished", {
+      matchId,
+      result: "lose",
+      reason,
+      message: reason === "surrender"
+        ? "Voce se rendeu."
+        : "A partida foi encerrada."
+    });
+  }
+
+  if (winner) {
+    io.to(winner.socketId).emit("match_finished", {
+      matchId,
+      result: "win",
+      reason,
+      message: reason === "surrender"
+        ? "O adversario se rendeu."
+        : "Voce venceu."
+    });
+  }
+
+  delete matches[matchId];
+}
+
 function areAdjacent(zoneA, zoneB) {
   const ADJ = {
     bancoPlayer: ["campo1"],
@@ -1250,6 +1282,17 @@ const nextPlayer =
     });
 
     emitMatchUpdate(match);
+  });
+
+  socket.on("surrender_match", ({ matchId, playerId }) => {
+    const match = matches[matchId];
+    if (!match) return;
+
+    const playerState = match.players.find(p => p.player.id === playerId);
+    if (!playerState) return;
+    if (playerState.socketId !== socket.id) return;
+
+    finishMatch(matchId, playerId, "surrender");
   });
 
   socket.on("move_card", ({ matchId, fromZone, fromIndex, toZone, playerId }) => {
