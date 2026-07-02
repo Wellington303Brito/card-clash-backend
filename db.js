@@ -6,7 +6,7 @@ const pool = mysql.createPool({
     port: 4000,                               // Deixe 4000 (é o padrão do TiDB)
     user: '2MZwi1rE2jnd2YV.root',      // Ex: '4aBcdEf.root'
     password: 'T1YEZNac7FaSpPZI',
-    database: 'sys',                         // Pode deixar 'test' ou o nome do seu banco                         
+    database: 'test',                         // Pode deixar 'test' ou o nome do seu banco                         
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
