@@ -1,29 +1,25 @@
-const mysql = require("mysql2/promise");
+const mysql = require('mysql2');
 
-const db = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: Number(process.env.DB_PORT) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+// ✨ Mudamos de createConnection para createPool para a conexão não cair!
+const pool = mysql.createPool({
+    host: 'gateway01.us-east-1.prod.aws.tidbcloud.com', 
+    port: 4000,                               // Deixe 4000 (é o padrão do TiDB)
+    user: '2MZwi1rE2jnd2YV.root',      // Ex: '4aBcdEf.root'
+    password: 'T1YEZNac7FaSpPZI',
+    database: 'sys',                         // Pode deixar 'test' ou o nome do seu banco                         
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    ssl: {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: true // Obrigatório para o TiDB Cloud aceitar
+    }
 });
 
-console.log("DB_HOST:", process.env.DB_HOST);
-console.log("DB_USER:", process.env.DB_USER);
-console.log("DB_NAME:", process.env.DB_NAME);
-console.log("DB_PORT:", process.env.DB_PORT);
+// Para o código continuar funcionando sem você quebrar suas rotas, 
+// transformamos o pool em formato de promessa (muito recomendado para async/await)
+const db = pool.promise();
 
-(async () => {
-  try {
-    const connection = await db.getConnection();
-    console.log("Conectado ao MySQL!");
-    connection.release();
-  } catch (err) {
-    console.error("Erro ao conectar no MySQL:", err);
-  }
-})();
+console.log('🚀 Pool de conexões do TiDB Cloud configurado!');
 
 module.exports = db;

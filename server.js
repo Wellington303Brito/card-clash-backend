@@ -1,10 +1,10 @@
+require("dotenv").config();
 const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
 const CARD_DB = require("./cards-db");
 const cors = require("cors");
-require("dotenv").config();
 const { runEffects } = require("./effects");
 
 const app = express();
@@ -799,6 +799,8 @@ function getClassAdvantageMultiplier(attacker, defender) {
   };
 
   if (attacker?.ignoreClassAdvantage) return 1;
+  if (attacker?.bonusVsPusher && defType === "Pusher") return 1.25;
+  if (Array.isArray(defender?.immuneFromTypes) && defender.immuneFromTypes.includes(atkType)) return 0;
 
   if (winsAgainst[atkType] === defType) return 1.25;
   if (winsAgainst[defType] === atkType) return 0.75;
@@ -817,6 +819,15 @@ function getHeavyArmorReduction(card, armorPierce = 0) {
 
 function applyDamage(attackerCard, defenderCard, baseDamage) {
   let damage = Number(baseDamage || 0);
+
+  if (defenderCard?.firstHitShield) {
+    defenderCard.firstHitShield = false;
+    return 0;
+  }
+
+  if (defenderCard?.immuneToUnitDamage) {
+    return 0;
+  }
 
   const classMult = getClassAdvantageMultiplier(attackerCard, defenderCard);
   damage = Math.floor(damage * classMult);
