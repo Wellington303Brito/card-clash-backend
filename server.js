@@ -450,9 +450,10 @@ app.post("/roll/10", authenticateToken, async (req, res) => {
     }
 
     for (const card of rolledCards) {
+      // CORREÇÃO: Alterado de player_cards para 'collection'
       await db.query(
         `
-        INSERT INTO player_cards (player_id, card_id, quantity)
+        INSERT INTO collection (player_id, card_id, quantity)
         VALUES (?, ?, 1)
         ON DUPLICATE KEY UPDATE quantity = quantity + 1
         `,
@@ -548,7 +549,7 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
     await db.query(deleteCardsSql, [deckId]);
 
     if (cards.length === 0) {
-      return res.json({ message: "Deck atualizado com sucesso!" });
+      return res.json({ message: "Deck updated com sucesso!" });
     }
 
     const values = cards.map(card => [deckId, card.card_name, card.quantity]);
@@ -562,7 +563,6 @@ app.put("/decks/:deckId", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro ao atualizar deck." });
   }
 });
-
 const PORT = process.env.PORT || 3000;
 const http = require("http");
 const { Server } = require("socket.io");
