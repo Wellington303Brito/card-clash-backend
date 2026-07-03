@@ -291,31 +291,39 @@ app.get("/collection/full", authenticateToken, async (req, res) => {
   try {
     const playerId = req.player.id;
 
+    // 1. Buscando da tabela correta (collection) e trazendo os dados direto da tabela 'cards'
     const sql = `
-      SELECT card_id, quantity
-      FROM player_cards
-      WHERE player_id = ?
+      SELECT c.card_id, c.quantity, cards.name, cards.emoji, cards.card_class, 
+             cards.type, cards.rarity, cards.cost, cards.attack_cost, 
+             cards.attack, cards.defense, cards.text
+      FROM collection c
+      JOIN cards ON c.card_id = cards.id
+      WHERE c.player_id = ?
     `;
 
     const [results] = await db.query(sql, [playerId]);
 
-    const collection = results
-      .map(row => {
-        const cardData = CARD_DB[row.card_id];
-        if (!cardData) return null;
-
-        return {
-          ...cardData,
-          quantity: row.quantity
-        };
-      })
-      .filter(Boolean);
+    // 2. Formatando o resultado para o frontend
+    const collection = results.map(row => ({
+      id: row.card_id,
+      name: row.name,
+      emoji: row.emoji,
+      card_class: row.card_class,
+      type: row.type,
+      rarity: row.rarity,
+      cost: row.cost,
+      attack_cost: row.attack_cost,
+      attack: row.attack,
+      defense: row.defense,
+      text: row.text,
+      quantity: row.quantity
+    }));
 
     res.json({
       cards: collection
     });
   } catch (error) {
-    console.error("Erro em /collection/full:", error);
+    console.error("Erro na rota /collection/full:", error);
     res.status(500).json({ error: "Erro ao buscar coleção completa." });
   }
 });
