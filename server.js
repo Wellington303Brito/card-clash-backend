@@ -447,6 +447,9 @@ app.post("/roll/10", authenticateToken, async (req, res) => {
         throw new Error("Carta inválida sorteada no /roll/10.");
       }
 
+      // LINHA EXTRA AQUI:
+      console.log(`---> GACHA SORTEOU: ID=${card.id} | Nome=${card.name}`);
+
       rolledCards.push(card);
     }
 
