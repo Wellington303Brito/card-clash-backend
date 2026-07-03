@@ -388,9 +388,10 @@ app.post("/roll", authenticateToken, async (req, res) => {
       throw new Error("Carta inválida sorteada no /roll.");
     }
 
+    // CORREÇÃO: Alterado de player_cards para 'collection'
     await db.query(
       `
-      INSERT INTO player_cards (player_id, card_id, quantity)
+      INSERT INTO collection (player_id, card_id, quantity)
       VALUES (?, ?, 1)
       ON DUPLICATE KEY UPDATE quantity = quantity + 1
       `,
