@@ -1076,17 +1076,29 @@ io.on("connection", (socket) => {
 
     ensureMatchStructures(match);
 
+    console.log("-> Recebendo deck para a partida:", deck);
+
+    // CORREÇÃO: Garante que busca a carta corretamente no CARD_DB,
+    // lidando caso o id venha como string direta ou como um objeto { id }
     const normalizedDeck = deck
-      .map(id => CARD_DB[id])
+      .map(item => {
+        const id = typeof item === "object" ? (item.id || item.card_id) : item;
+        return CARD_DB[id];
+      })
       .filter(Boolean)
       .map(card => sanitizeCard({ ...card }));
+
+    console.log(`-> Deck normalizado com sucesso! Total de cartas: ${normalizedDeck.length}`);
 
     match.decks[socket.id] = shuffle(normalizedDeck);
     match.hands[socket.id] = [];
 
+    // Compra as 3 cartas iniciais se o deck tiver conteúdo
     while (match.hands[socket.id].length < 3 && match.decks[socket.id].length > 0) {
       match.hands[socket.id].push(match.decks[socket.id].pop());
     }
+
+    console.log(`-> Mão inicial gerada para o socket ${socket.id}. Cartas na mão: ${match.hands[socket.id].length}`);
 
     emitMatchUpdate(match);
   });
