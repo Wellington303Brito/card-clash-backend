@@ -46,6 +46,51 @@ async function unlockAllCards(playerId) {
   }
 }
 
+// Função para sincronizar o seu CARD_DB do código direto para o banco de dados MySQL
+async function sincronizarCartasNoBanco() {
+  try {
+    console.log("Iniciando sincronização de cartas com o banco de dados...");
+    
+    // Altere 'CARD_DB' pelo nome real do objeto onde ficam suas cartas no código
+    for (const key in CARD_DB) {
+      const card = CARD_DB[key];
+      
+      const sql = `
+        INSERT INTO cards (id, name, emoji, card_class, type, rarity, cost, attack_cost, attack, defense, text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE 
+          name = VALUES(name), emoji = VALUES(emoji), card_class = VALUES(card_class),
+          type = VALUES(type), rarity = VALUES(rarity), cost = VALUES(cost),
+          attack_cost = VALUES(attack_cost), attack = VALUES(attack), 
+          defense = VALUES(defense), text = VALUES(text)
+      `;
+      
+      await db.query(sql, [
+        card.id,
+        card.name,
+        card.emoji,
+        card.cardClass || card.card_class || "unit", // garante compatibilidade de nomes
+        card.type,
+        card.rarity,
+        card.cost,
+        card.attackCost || card.attack_cost || 0,
+        card.attack,
+        card.defense,
+        card.text || ""
+      ]);
+    }
+    
+    console.log("Todas as cartas do código foram sincronizadas com sucesso no banco!");
+  } catch (error) {
+    console.error("Erro ao sincronizar cartas no banco:", error);
+  }
+}
+
+// Chame essa função logo após a conexão com o banco de dados ser estabelecida com sucesso!
+// Exemplo:
+// db.connect().then(() => sincronizarCartasNoBanco());
+// Ou apenas chame direto se seu db já inicia conectado:
+sincronizarCartasNoBanco();
 app.post("/debug/unlock-all", authenticateToken, async (req, res) => {
   try {
     const playerId = req.player.id;
