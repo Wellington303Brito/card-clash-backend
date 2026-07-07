@@ -71,17 +71,17 @@ const EFFECTS = {
   // BÁSICOS
   // =============================
   blitz(ctx) {
-    const u = ctx.sourceUnit;
-    if (!u) return;
-
-    const s = this.getState(u);
-    s.canActImmediately = true;
-    s.extraActions = 1;
-
-    // INTEGRAÇÃO COM BACKEND
-    u.card.blitz = true;
-
-    return true;
+    const card = EFFECT_BASICS._getCard(ctx);
+    if (!card) return;
+    card.blitz = true;
+    
+    if (ctx && typeof ctx.getState === "function") {
+      const s = ctx.getState(ctx);
+      if (s) s.canAttack = true;
+    } else if (ctx?.state) {
+      ctx.state.canAttack = true;
+      ctx.state.summonTurn = false;
+    }
   },
 
   mobilize(ctx, effect) {
