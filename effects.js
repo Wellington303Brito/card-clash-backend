@@ -70,11 +70,16 @@ const EFFECTS = {
   // =============================
   // BÁSICOS
   // =============================
-  blitz(ctx) {
-    const card = EFFECT_BASICS._getCard(ctx);
+ blitz(ctx) {
+    // Tenta pegar o card usando o 'this' se ele existir, ou direto do 'ctx'
+    const card = (this && typeof this._getCard === "function") 
+      ? this._getCard(ctx) 
+      : (ctx?.card || ctx?.unit?.card || ctx);
+      
     if (!card) return;
     card.blitz = true;
     
+    // Evita o erro do state/getState
     if (ctx && typeof ctx.getState === "function") {
       const s = ctx.getState(ctx);
       if (s) s.canAttack = true;
